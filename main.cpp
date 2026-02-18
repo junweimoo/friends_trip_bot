@@ -4,7 +4,7 @@
 #include <string>
 #include <sstream>
 #include "bot/Bot.h"
-#include "bot/DatabaseManager.h"
+#include "database/DatabaseManager.h"
 
 void loadEnv(const std::string& filename) {
     std::ifstream file(filename);
@@ -60,6 +60,26 @@ int main() {
     myBot.registerCommandHandler("/start", [&myBot](const bot::Message& msg) {
         std::cout << "Received /start from " << msg.chat_id << std::endl;
         myBot.sendMessage(msg.chat_id, "Hello! I am your Friends Trip Bot.");
+    });
+
+    // Register /menu command to demonstrate Inline Keyboard
+    myBot.registerCommandHandler("/menu", [&myBot](const bot::Message& msg) {
+        bot::InlineKeyboardMarkup keyboard;
+        bot::InlineKeyboardButton btn1{"Option 1", "opt_1"};
+        bot::InlineKeyboardButton btn2{"Option 2", "opt_2"};
+
+        // Add buttons in a single row
+        keyboard.inline_keyboard = {{btn1, btn2}};
+
+        myBot.sendMessage(msg.chat_id, "Please choose an option:", &keyboard);
+    });
+
+    // Register callback handler to echo button presses
+    myBot.registerCallbackHandler([&myBot](const bot::CallbackQuery& query) {
+        std::cout << "Received callback: " << query.data << " from " << query.from.first_name << std::endl;
+
+        std::string response = "You pressed: " + query.data;
+        myBot.sendMessage(query.message.chat.id, response);
     });
 
     // Register generic text handler

@@ -4,8 +4,11 @@
 #include <thread>
 #include <chrono>
 #include <curl/curl.h>
+#include <nlohmann/json.hpp>
 
 namespace bot {
+
+using json = nlohmann::json;
 
 // Helper for CURL write callback
 static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
@@ -34,7 +37,6 @@ void Bot::start() {
             poll();
         } catch (const std::exception& e) {
             std::cerr << "Error in bot loop: " << e.what() << std::endl;
-            // Only sleep when an exception is caught to avoid tight-looping on persistent errors
             std::this_thread::sleep_for(std::chrono::seconds(5));
         }
     }
@@ -52,14 +54,36 @@ void Bot::registerTextHandler(TextHandler handler) {
     textHandler = handler;
 }
 
-void Bot::sendMessage(long long chatId, const std::string& text) {
+void Bot::registerCallbackHandler(CallbackHandler handler) {
+    callbackHandler = handler;
+}
+
+void Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard) {
     CURL *curl = curl_easy_init();
     if(curl) {
         char *output = curl_easy_escape(curl, text.c_str(), text.length());
         if(output) {
             std::string encodedText(output);
-            std::string params = "chat_id=" + std::to_string(chatId) + "&text=" + encodedText;
-            makeRequest("sendMessage", params);
+            std::string url = baseUrl + "sendMessage?chat_id=" + std::to_string(chatId) + "&text=" + encodedText;
+
+            if (keyboard) {
+                json j = *keyboard;
+                std::string jsonStr = j.dump();
+                char *encodedKeyboard = curl_easy_escape(curl, jsonStr.c_str(), jsonStr.length());
+                if (encodedKeyboard) {
+                    url += "&reply_markup=" + std::string(encodedKeyboard);
+                    curl_free(encodedKeyboard);
+                }
+            }
+
+            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+            CURLcode res = curl_easy_perform(curl);
+            if(res != CURLE_OK) {
+                 fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            }
+
             curl_free(output);
         }
         curl_easy_cleanup(curl);
@@ -92,54 +116,65 @@ std::string Bot::makeRequest(const std::string& endpoint, const std::string& par
     return readBuffer;
 }
 
-std::vector<Message> Bot::getUpdates() {
+std::vector<Update> Bot::getUpdates() {
     std::string params = "offset=" + std::to_string(lastUpdateId) + "&timeout=30";
     std::string responseStr = makeRequest("getUpdates", params);
 
-    std::vector<Message> messages;
+    std::vector<Update> updates;
 
     try {
         auto jsonResponse = json::parse(responseStr);
-        GetUpdatesResponse resp = jsonResponse.get<GetUpdatesResponse>();
-
-        if (resp.ok) {
-            for (const auto& update : resp.result) {
-                if (update.message.message_id != 0) {
-                    Message msg;
-                    msg.update_id = update.update_id;
-                    msg.chat_id = update.message.chat.id;
-                    msg.text = update.message.text;
-                    msg.sender_name = update.message.from.first_name;
-                    messages.push_back(msg);
+        if (jsonResponse.contains("ok") && jsonResponse["ok"].get<bool>()) {
+            if (jsonResponse.contains("result")) {
+                for (const auto& item : jsonResponse["result"]) {
+                    Update update;
+                    item.get_to(update);
+                    updates.push_back(update);
                 }
             }
         }
     } catch (const std::exception& e) {
-        throw;
+        std::cerr << "JSON parse error: " << e.what() << std::endl;
     }
 
-    return messages;
+    return updates;
 }
 
 void Bot::poll() {
     auto updates = getUpdates();
-    for (const auto& msg : updates) {
-        if (msg.update_id >= lastUpdateId) {
-            lastUpdateId = msg.update_id + 1;
+    for (const auto& update : updates) {
+        if (update.update_id >= lastUpdateId) {
+            lastUpdateId = update.update_id + 1;
         }
 
-        if (!msg.text.empty()) {
-            if (msg.text[0] == '/') {
-                size_t spacePos = msg.text.find(' ');
-                std::string command = (spacePos == std::string::npos) ? msg.text : msg.text.substr(0, spacePos);
+        // Handle Messages
+        if (update.message.message_id != 0) {
+            Message msg;
+            msg.update_id = update.update_id;
+            msg.chat_id = update.message.chat.id;
+            msg.text = update.message.text;
+            msg.sender_name = update.message.from.first_name;
 
-                if (commandHandlers.find(command) != commandHandlers.end()) {
-                    commandHandlers[command](msg);
+            if (!msg.text.empty()) {
+                if (msg.text[0] == '/') {
+                    size_t spacePos = msg.text.find(' ');
+                    std::string command = (spacePos == std::string::npos) ? msg.text : msg.text.substr(0, spacePos);
+
+                    if (commandHandlers.find(command) != commandHandlers.end()) {
+                        commandHandlers[command](msg);
+                    }
+                } else {
+                    if (textHandler) {
+                        textHandler(msg);
+                    }
                 }
-            } else {
-                if (textHandler) {
-                    textHandler(msg);
-                }
+            }
+        }
+
+        // Handle Callback Queries
+        if (!update.callback_query.id.empty()) {
+            if (callbackHandler) {
+                callbackHandler(update.callback_query);
             }
         }
     }

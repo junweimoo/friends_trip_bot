@@ -14,7 +14,18 @@ struct Chat {
 };
 
 struct User {
+    long long id;
     std::string first_name;
+    std::string username;
+};
+
+struct InlineKeyboardButton {
+    std::string text;
+    std::string callback_data;
+};
+
+struct InlineKeyboardMarkup {
+    std::vector<std::vector<InlineKeyboardButton>> inline_keyboard;
 };
 
 struct TelegramMessage {
@@ -24,9 +35,17 @@ struct TelegramMessage {
     User from;
 };
 
+struct CallbackQuery {
+    std::string id;
+    User from;
+    TelegramMessage message;
+    std::string data;
+};
+
 struct Update {
     long long update_id;
     TelegramMessage message;
+    CallbackQuery callback_query;
 };
 
 struct GetUpdatesResponse {
@@ -34,15 +53,27 @@ struct GetUpdatesResponse {
     std::vector<Update> result;
 };
 
-// JSON Deserialization Logic
+// JSON Serialization/Deserialization Logic
+
+inline void to_json(json& j, const InlineKeyboardButton& b) {
+    j = json{{"text", b.text}, {"callback_data", b.callback_data}};
+}
+
+inline void to_json(json& j, const InlineKeyboardMarkup& k) {
+    j = json{{"inline_keyboard", k.inline_keyboard}};
+}
 
 inline void from_json(const json& j, Chat& c) {
     j.at("id").get_to(c.id);
 }
 
 inline void from_json(const json& j, User& u) {
+    j.at("id").get_to(u.id);
     if (j.contains("first_name")) {
         j.at("first_name").get_to(u.first_name);
+    }
+    if (j.contains("username")) {
+        j.at("username").get_to(u.username);
     }
 }
 
@@ -57,10 +88,24 @@ inline void from_json(const json& j, TelegramMessage& m) {
     }
 }
 
+inline void from_json(const json& j, CallbackQuery& c) {
+    j.at("id").get_to(c.id);
+    j.at("from").get_to(c.from);
+    if (j.contains("message")) {
+        j.at("message").get_to(c.message);
+    }
+    if (j.contains("data")) {
+        j.at("data").get_to(c.data);
+    }
+}
+
 inline void from_json(const json& j, Update& u) {
     j.at("update_id").get_to(u.update_id);
     if (j.contains("message")) {
         j.at("message").get_to(u.message);
+    }
+    if (j.contains("callback_query")) {
+        j.at("callback_query").get_to(u.callback_query);
     }
 }
 

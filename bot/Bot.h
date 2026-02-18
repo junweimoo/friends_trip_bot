@@ -6,6 +6,7 @@
 #include <map>
 #include <vector>
 #include <atomic>
+#include "TelegramTypes.h"
 
 namespace bot {
 
@@ -18,6 +19,7 @@ struct Message {
 
 using CommandHandler = std::function<void(const Message&)>;
 using TextHandler = std::function<void(const Message&)>;
+using CallbackHandler = std::function<void(const CallbackQuery&)>;
 
 class Bot {
 public:
@@ -29,8 +31,9 @@ public:
 
     void registerCommandHandler(const std::string& command, CommandHandler handler);
     void registerTextHandler(TextHandler handler);
+    void registerCallbackHandler(CallbackHandler handler);
 
-    void sendMessage(long long chatId, const std::string& text);
+    void sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);
 
 private:
     std::string token;
@@ -40,9 +43,10 @@ private:
 
     std::map<std::string, CommandHandler> commandHandlers;
     TextHandler textHandler;
+    CallbackHandler callbackHandler;
 
     void poll();
-    std::vector<Message> getUpdates();
+    std::vector<Update> getUpdates();
     std::string makeRequest(const std::string& endpoint, const std::string& params = "");
 };
 
