@@ -34,6 +34,7 @@ public:
     void registerCallbackHandler(CallbackHandler handler);
 
     void sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);
+    void editMessage(long long chatId, long long messageId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);
 
 private:
     std::string token;

@@ -90,6 +90,40 @@ void Bot::sendMessage(long long chatId, const std::string& text, const InlineKey
     }
 }
 
+void Bot::editMessage(long long chatId, long long messageId, const std::string& text, const InlineKeyboardMarkup* keyboard) {
+    CURL *curl = curl_easy_init();
+    if(curl) {
+        char *output = curl_easy_escape(curl, text.c_str(), text.length());
+        if(output) {
+            std::string encodedText(output);
+            std::string url = baseUrl + "editMessageText?chat_id=" + std::to_string(chatId) +
+                             "&message_id=" + std::to_string(messageId) +
+                             "&text=" + encodedText;
+
+            if (keyboard) {
+                json j = *keyboard;
+                std::string jsonStr = j.dump();
+                char *encodedKeyboard = curl_easy_escape(curl, jsonStr.c_str(), jsonStr.length());
+                if (encodedKeyboard) {
+                    url += "&reply_markup=" + std::string(encodedKeyboard);
+                    curl_free(encodedKeyboard);
+                }
+            }
+
+            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+            CURLcode res = curl_easy_perform(curl);
+            if(res != CURLE_OK) {
+                 fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            }
+
+            curl_free(output);
+        }
+        curl_easy_cleanup(curl);
+    }
+}
+
 std::string Bot::makeRequest(const std::string& endpoint, const std::string& params) {
     CURL* curl;
     CURLcode res;

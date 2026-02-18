@@ -74,12 +74,17 @@ int main() {
         myBot.sendMessage(msg.chat_id, "Please choose an option:", &keyboard);
     });
 
-    // Register callback handler to echo button presses
+    // Register callback handler to edit the message when a button is pressed
     myBot.registerCallbackHandler([&myBot](const bot::CallbackQuery& query) {
         std::cout << "Received callback: " << query.data << " from " << query.from.first_name << std::endl;
 
-        std::string response = "You pressed: " + query.data;
-        myBot.sendMessage(query.message.chat.id, response);
+        bot::InlineKeyboardMarkup keyboard;
+        bot::InlineKeyboardButton btn1{"Option 1", "opt_1"};
+        bot::InlineKeyboardButton btn2{"Option 2", "opt_2"};
+        keyboard.inline_keyboard = {{btn1, btn2}};
+
+        std::string newText = query.data + " pressed";
+        myBot.editMessage(query.message.chat.id, query.message.message_id, newText, &keyboard);
     });
 
     // Register generic text handler
