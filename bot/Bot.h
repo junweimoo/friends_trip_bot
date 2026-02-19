@@ -6,16 +6,13 @@
 #include <map>
 #include <vector>
 #include <atomic>
+#include <memory>
+
+#include "Conversation.h"
+#include "InternalTypes.h"
 #include "TelegramTypes.h"
 
 namespace bot {
-
-struct Message {
-    long long chat_id;
-    std::string text;
-    std::string sender_name;
-    long long update_id;
-};
 
 using CommandHandler = std::function<void(const Message&)>;
 using TextHandler = std::function<void(const Message&)>;
@@ -32,6 +29,7 @@ public:
     void registerCommandHandler(const std::string& command, CommandHandler handler);
     void registerTextHandler(TextHandler handler);
     void registerCallbackHandler(CallbackHandler handler);
+    void registerConversation(std::unique_ptr<Conversation> conversation);
 
     void sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);
     void editMessage(long long chatId, long long messageId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);
@@ -45,6 +43,7 @@ private:
     std::map<std::string, CommandHandler> commandHandlers;
     TextHandler textHandler;
     CallbackHandler callbackHandler;
+    std::map<long long, std::map<long long, std::unique_ptr<Conversation>>> conversations;
 
     void poll();
     std::vector<Update> getUpdates();

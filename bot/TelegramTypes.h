@@ -35,7 +35,7 @@ struct TelegramMessage {
     User from;
 };
 
-struct CallbackQuery {
+struct TelegramCallbackQuery {
     std::string id;
     User from;
     TelegramMessage message;
@@ -45,7 +45,7 @@ struct CallbackQuery {
 struct Update {
     long long update_id;
     TelegramMessage message;
-    CallbackQuery callback_query;
+    TelegramCallbackQuery callback_query;
 };
 
 struct GetUpdatesResponse {
@@ -88,7 +88,7 @@ inline void from_json(const json& j, TelegramMessage& m) {
     }
 }
 
-inline void from_json(const json& j, CallbackQuery& c) {
+inline void from_json(const json& j, TelegramCallbackQuery& c) {
     j.at("id").get_to(c.id);
     j.at("from").get_to(c.from);
     if (j.contains("message")) {

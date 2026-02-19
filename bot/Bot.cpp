@@ -1,5 +1,4 @@
 #include "Bot.h"
-#include "TelegramTypes.h"
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -56,6 +55,13 @@ void Bot::registerTextHandler(TextHandler handler) {
 
 void Bot::registerCallbackHandler(CallbackHandler handler) {
     callbackHandler = handler;
+}
+
+void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
+    if (!conversation) return;
+    long long chatId = conversation->getChatId();
+    long long userId = conversation->getUserId();
+    conversations[chatId][userId] = std::move(conversation);
 }
 
 void Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard) {
@@ -176,27 +182,56 @@ std::vector<Update> Bot::getUpdates() {
 
 void Bot::poll() {
     auto updates = getUpdates();
-    for (const auto& update : updates) {
+    for (const Update& update : updates) {
         if (update.update_id >= lastUpdateId) {
             lastUpdateId = update.update_id + 1;
+        }
+
+        // Handle Conversations
+        long long chatId = 0;
+        long long userId = 0;
+
+        if (update.message.message_id != 0) {
+            chatId = update.message.chat.id;
+            userId = update.message.from.id;
+        } else if (!update.callback_query.id.empty()) {
+            chatId = update.callback_query.message.chat.id;
+            userId = update.callback_query.from.id;
+        }
+
+        if (chatId != 0 && userId != 0) {
+            auto chatIt = conversations.find(chatId);
+            if (chatIt != conversations.end()) {
+                auto userIt = chatIt->second.find(userId);
+                if (userIt != chatIt->second.end()) {
+                    userIt->second->handleUpdate(update);
+                    if (userIt->second->isClosed()) {
+                        chatIt->second.erase(userIt);
+                    }
+                    continue;
+                }
+            }
         }
 
         // Handle Messages
         if (update.message.message_id != 0) {
             Message msg;
             msg.update_id = update.update_id;
+            msg.message_id = update.message.message_id;
             msg.chat_id = update.message.chat.id;
-            msg.text = update.message.text;
+            msg.sender_id = update.message.from.id;
             msg.sender_name = update.message.from.first_name;
+            msg.text = update.message.text;
 
             if (!msg.text.empty()) {
+                // Handle Commands
                 if (msg.text[0] == '/') {
                     size_t spacePos = msg.text.find(' ');
                     std::string command = (spacePos == std::string::npos) ? msg.text : msg.text.substr(0, spacePos);
-
                     if (commandHandlers.find(command) != commandHandlers.end()) {
                         commandHandlers[command](msg);
                     }
+                // Handle Text
                 } else {
                     if (textHandler) {
                         textHandler(msg);
@@ -207,8 +242,15 @@ void Bot::poll() {
 
         // Handle Callback Queries
         if (!update.callback_query.id.empty()) {
+            CallbackQuery query;
+            query.update_id = update.update_id;
+            query.chat_id = update.callback_query.message.chat.id;
+            query.message_id = update.callback_query.message.message_id;
+            query.sender_id = update.callback_query.from.id;
+            query.sender_name = update.callback_query.from.first_name;
+            query.data = update.callback_query.data;
             if (callbackHandler) {
-                callbackHandler(update.callback_query);
+                callbackHandler(query);
             }
         }
     }

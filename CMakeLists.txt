@@ -32,7 +32,9 @@ find_package(CURL REQUIRED)
 add_executable(friends_trip_bot
     main.cpp
     bot/Bot.cpp
+    bot/Conversation.cpp
     database/DatabaseManager.cpp
+    conversations/DemoConversation.cpp
 )
 
 target_link_libraries(friends_trip_bot

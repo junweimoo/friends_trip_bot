@@ -3,7 +3,9 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <memory>
 #include "bot/Bot.h"
+#include "conversations/DemoConversation.h"
 #include "database/DatabaseManager.h"
 
 void loadEnv(const std::string& filename) {
@@ -74,9 +76,17 @@ int main() {
         myBot.sendMessage(msg.chat_id, "Please choose an option:", &keyboard);
     });
 
+    // Register /convo command to start DemoConversation
+    myBot.registerCommandHandler("/convo", [&myBot](const bot::Message& msg) {
+        auto convo = std::make_unique<bot::DemoConversation>(msg.chat_id, msg.sender_id, myBot);
+        myBot.registerConversation(std::move(convo));
+
+        myBot.sendMessage(msg.chat_id, "Please enter string 1:");
+    });
+
     // Register callback handler to edit the message when a button is pressed
     myBot.registerCallbackHandler([&myBot](const bot::CallbackQuery& query) {
-        std::cout << "Received callback: " << query.data << " from " << query.from.first_name << std::endl;
+        std::cout << "Received callback: " << query.data << " from " << query.sender_name << std::endl;
 
         bot::InlineKeyboardMarkup keyboard;
         bot::InlineKeyboardButton btn1{"Option 1", "opt_1"};
@@ -84,7 +94,7 @@ int main() {
         keyboard.inline_keyboard = {{btn1, btn2}};
 
         std::string newText = query.data + " pressed";
-        myBot.editMessage(query.message.chat.id, query.message.message_id, newText, &keyboard);
+        myBot.editMessage(query.chat_id, query.message_id, newText, &keyboard);
     });
 
     // Register generic text handler
