@@ -7,6 +7,8 @@
 #include <vector>
 #include <atomic>
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 
 #include "Conversation.h"
 #include "InternalTypes.h"
@@ -43,7 +45,15 @@ private:
     std::map<std::string, CommandHandler> commandHandlers;
     TextHandler textHandler;
     CallbackHandler callbackHandler;
-    std::map<long long, std::map<long long, std::unique_ptr<Conversation>>> conversations;
+
+    struct ConversationEntry {
+        std::mutex mutex;
+        std::unique_ptr<Conversation> conversation;
+    };
+
+    // Key: {chat_id, user_id}
+    std::map<std::pair<long long, long long>, std::shared_ptr<ConversationEntry>> conversations;
+    std::shared_mutex conversationsMutex;
 
     void poll();
     std::vector<Update> getUpdates();

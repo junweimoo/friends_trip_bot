@@ -4,6 +4,7 @@
 #include <chrono>
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
+#include <future>
 
 namespace bot {
 
@@ -61,7 +62,15 @@ void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
     if (!conversation) return;
     long long chatId = conversation->getChatId();
     long long userId = conversation->getUserId();
-    conversations[chatId][userId] = std::move(conversation);
+
+    auto entry = std::make_shared<ConversationEntry>();
+    entry->conversation = std::move(conversation);
+
+    {
+        // Use unique_lock here so that only one thread can write to conversations at a time
+        std::unique_lock<std::shared_mutex> lock(conversationsMutex);
+        conversations[{chatId, userId}] = entry;
+    }
 }
 
 void Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard) {
@@ -199,19 +208,48 @@ void Bot::poll() {
             userId = update.callback_query.from.id;
         }
 
+        bool handled = false;
         if (chatId != 0 && userId != 0) {
-            auto chatIt = conversations.find(chatId);
-            if (chatIt != conversations.end()) {
-                auto userIt = chatIt->second.find(userId);
-                if (userIt != chatIt->second.end()) {
-                    userIt->second->handleUpdate(update);
-                    if (userIt->second->isClosed()) {
-                        chatIt->second.erase(userIt);
-                    }
-                    continue;
+            std::shared_ptr<ConversationEntry> entry = nullptr;
+            {
+                // Use shared_lock here since this is a read-only operation
+                std::shared_lock<std::shared_mutex> lock(conversationsMutex);
+                auto it = conversations.find({chatId, userId});
+                if (it != conversations.end()) {
+                    entry = it->second;
                 }
             }
+
+            if (entry) {
+                std::thread([this, update, chatId, userId, entry]() {
+                    bool closedNow = false;
+                    {
+                        // Use fine-grained lock specific to this conversation entry
+                        std::lock_guard<std::mutex> lock(entry->mutex);
+                        if (!entry->conversation->isClosed()) {
+                            // Dispatch conversation
+                            entry->conversation->handleUpdate(update);
+                            closedNow = entry->conversation->isClosed();
+                        } else {
+                            // Already closed by another thread, do nothing
+                            closedNow = true;
+                        }
+                    }
+
+                    if (closedNow) {
+                        // Use unique_lock here so that only one thread can erase from conversations at a time
+                        std::unique_lock<std::shared_mutex> mapLock(conversationsMutex);
+                        auto it = conversations.find({chatId, userId});
+                        if (it != conversations.end() && it->second == entry) {
+                            conversations.erase(it);
+                        }
+                    }
+                }).detach();
+                handled = true;
+            }
         }
+
+        if (handled) continue;
 
         // Handle Messages
         if (update.message.message_id != 0) {
@@ -229,12 +267,14 @@ void Bot::poll() {
                     size_t spacePos = msg.text.find(' ');
                     std::string command = (spacePos == std::string::npos) ? msg.text : msg.text.substr(0, spacePos);
                     if (commandHandlers.find(command) != commandHandlers.end()) {
-                        commandHandlers[command](msg);
+                        // Dispatch command
+                        std::thread(commandHandlers[command], msg).detach();
                     }
                 // Handle Text
                 } else {
                     if (textHandler) {
-                        textHandler(msg);
+                        // Dispatch text
+                        std::thread(textHandler, msg).detach();
                     }
                 }
             }
@@ -250,7 +290,8 @@ void Bot::poll() {
             query.sender_name = update.callback_query.from.first_name;
             query.data = update.callback_query.data;
             if (callbackHandler) {
-                callbackHandler(query);
+                // Dispatch callback
+                std::thread(callbackHandler, query).detach();
             }
         }
     }
