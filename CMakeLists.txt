@@ -35,6 +35,7 @@ add_executable(friends_trip_bot
     bot/Conversation.cpp
     database/DatabaseManager.cpp
     conversations/DemoConversation.cpp
+    handlers/Handlers.cpp
 )
 
 target_link_libraries(friends_trip_bot

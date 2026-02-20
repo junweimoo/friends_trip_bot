@@ -5,8 +5,8 @@
 #include <sstream>
 #include <memory>
 #include "bot/Bot.h"
-#include "conversations/DemoConversation.h"
 #include "database/DatabaseManager.h"
+#include "handlers/Handlers.h"
 
 void loadEnv(const std::string& filename) {
     std::ifstream file(filename);
@@ -58,50 +58,8 @@ int main() {
     std::string token(tokenEnv);
     bot::Bot myBot(token);
 
-    // Register /start command handler
-    myBot.registerCommandHandler("/start", [&myBot](const bot::Message& msg) {
-        std::cout << "Received /start from " << msg.chat_id << std::endl;
-        myBot.sendMessage(msg.chat_id, "Hello! I am your Friends Trip Bot.");
-    });
-
-    // Register /menu command to demonstrate Inline Keyboard
-    myBot.registerCommandHandler("/menu", [&myBot](const bot::Message& msg) {
-        bot::InlineKeyboardMarkup keyboard;
-        bot::InlineKeyboardButton btn1{"Option 1", "opt_1"};
-        bot::InlineKeyboardButton btn2{"Option 2", "opt_2"};
-
-        // Add buttons in a single row
-        keyboard.inline_keyboard = {{btn1, btn2}};
-
-        myBot.sendMessage(msg.chat_id, "Please choose an option:", &keyboard);
-    });
-
-    // Register /convo command to start DemoConversation
-    myBot.registerCommandHandler("/convo", [&myBot](const bot::Message& msg) {
-        auto convo = std::make_unique<bot::DemoConversation>(msg.chat_id, msg.sender_id, myBot);
-        myBot.registerConversation(std::move(convo));
-
-        myBot.sendMessage(msg.chat_id, "Please enter string 1:");
-    });
-
-    // Register callback handler to edit the message when a button is pressed
-    myBot.registerCallbackHandler([&myBot](const bot::CallbackQuery& query) {
-        std::cout << "Received callback: " << query.data << " from " << query.sender_name << std::endl;
-
-        bot::InlineKeyboardMarkup keyboard;
-        bot::InlineKeyboardButton btn1{"Option 1", "opt_1"};
-        bot::InlineKeyboardButton btn2{"Option 2", "opt_2"};
-        keyboard.inline_keyboard = {{btn1, btn2}};
-
-        std::string newText = query.data + " pressed";
-        myBot.editMessage(query.chat_id, query.message_id, newText, &keyboard);
-    });
-
-    // Register generic text handler
-    myBot.registerTextHandler([&myBot](const bot::Message& msg) {
-        std::cout << "Received text from " << msg.chat_id << ": " << msg.text << std::endl;
-        myBot.sendMessage(msg.chat_id, "You said: " + msg.text);
-    });
+    // Register all handlers
+    handlers::registerHandlers(myBot);
 
     // Start the bot
     myBot.start();
