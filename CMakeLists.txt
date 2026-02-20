@@ -34,6 +34,9 @@ add_executable(friends_trip_bot
     bot/Bot.cpp
     bot/Conversation.cpp
     database/DatabaseManager.cpp
+    database/DatabaseSchema.cpp
+    repository/UserRepository.cpp
+    service/UserService.cpp
     conversations/DemoConversation.cpp
     handlers/Handlers.cpp
 )

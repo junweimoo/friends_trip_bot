@@ -46,18 +46,6 @@ void Bot::stop() {
     running = false;
 }
 
-void Bot::registerCommandHandler(const std::string& command, CommandHandler handler) {
-    commandHandlers[command] = handler;
-}
-
-void Bot::registerTextHandler(TextHandler handler) {
-    textHandler = handler;
-}
-
-void Bot::registerCallbackHandler(CallbackHandler handler) {
-    callbackHandler = handler;
-}
-
 void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
     if (!conversation) return;
     long long chatId = conversation->getChatId();

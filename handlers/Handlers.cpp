@@ -5,7 +5,7 @@
 
 namespace handlers {
 
-void registerHandlers(bot::Bot& bot) {
+void registerHandlers(bot::Bot& bot, const Services& services) {
     // Register /start command handler
     bot.registerCommandHandler("/start", [&bot](const bot::Message& msg) {
         std::cout << "Received /start from " << msg.chat_id << std::endl;
@@ -49,6 +49,20 @@ void registerHandlers(bot::Bot& bot) {
     bot.registerTextHandler([&bot](const bot::Message& msg) {
         std::cout << "Received text from " << msg.chat_id << ": " << msg.text << std::endl;
         bot.sendMessage(msg.chat_id, "You said: " + msg.text);
+    });
+
+    bot.registerCommandHandler("/register", [&bot, &userService = services.userService](const bot::Message& msg) {
+        User user;
+        user.user_id = msg.sender_id;
+        user.chat_id = msg.chat_id;
+        user.thread_id = 0;
+        user.name = msg.sender_name;
+
+        if (userService.registerUser(user)) {
+            bot.sendMessage(msg.chat_id, "Successfully registered!");
+        } else {
+            bot.sendMessage(msg.chat_id, "User already exists.");
+        }
     });
 }
 

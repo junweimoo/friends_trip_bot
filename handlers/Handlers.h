@@ -2,10 +2,15 @@
 #define HANDLERS_H
 
 #include "../bot/Bot.h"
+#include "../service/UserService.h"
 
 namespace handlers {
 
-void registerHandlers(bot::Bot& bot);
+struct Services {
+    UserService& userService;
+};
+
+void registerHandlers(bot::Bot& bot, const Services& services);
 
 } // namespace handlers
 

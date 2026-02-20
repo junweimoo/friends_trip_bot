@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
+#include <utility>
 
 #include "Conversation.h"
 #include "InternalTypes.h"
@@ -28,9 +29,21 @@ public:
     void start();
     void stop();
 
-    void registerCommandHandler(const std::string& command, CommandHandler handler);
-    void registerTextHandler(TextHandler handler);
-    void registerCallbackHandler(CallbackHandler handler);
+    template<typename F>
+    void registerCommandHandler(std::string command, F&& handler) {
+        commandHandlers.insert_or_assign(std::move(command), std::forward<F>(handler));
+    }
+
+    template<typename F>
+    void registerTextHandler(F&& handler) {
+        textHandler = std::forward<F>(handler);
+    }
+
+    template<typename F>
+    void registerCallbackHandler(F&& handler) {
+        callbackHandler = std::forward<F>(handler);
+    }
+
     void registerConversation(std::unique_ptr<Conversation> conversation);
 
     void sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);

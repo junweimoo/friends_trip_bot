@@ -6,7 +6,10 @@
 #include <memory>
 #include "bot/Bot.h"
 #include "database/DatabaseManager.h"
+#include "database/DatabaseSchema.h"
 #include "handlers/Handlers.h"
+#include "repository/UserRepository.h"
+#include "service/UserService.h"
 
 void loadEnv(const std::string& filename) {
     std::ifstream file(filename);
@@ -38,13 +41,23 @@ int main() {
     const char* dbUser = std::getenv("POSTGRES_USER");
     const char* dbPass = std::getenv("POSTGRES_PASSWORD");
 
+    std::unique_ptr<DatabaseManager> db;
+    std::unique_ptr<UserRepository> userRepo;
+    std::unique_ptr<UserService> userService;
+
     if (dbHost && dbPort && dbName && dbUser && dbPass) {
         std::stringstream ss;
         ss << "host=" << dbHost << " port=" << dbPort << " dbname=" << dbName
            << " user=" << dbUser << " password=" << dbPass;
 
-        DatabaseManager db(ss.str());
-        db.connect();
+        db = std::make_unique<DatabaseManager>(ss.str());
+        db->connect();
+
+        // Ensure tables exist
+        DatabaseSchema::createTables(*db);
+
+        userRepo = std::make_unique<UserRepository>(*db);
+        userService = std::make_unique<UserService>(*userRepo);
     } else {
         std::cerr << "Warning: Database environment variables not fully set. Skipping DB connection." << std::endl;
     }
@@ -59,7 +72,8 @@ int main() {
     bot::Bot myBot(token);
 
     // Register all handlers
-    handlers::registerHandlers(myBot);
+    handlers::Services services{*userService};
+    handlers::registerHandlers(myBot, services);
 
     // Start the bot
     myBot.start();
