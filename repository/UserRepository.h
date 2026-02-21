@@ -9,7 +9,7 @@
 struct User {
     long long user_id;
     long long chat_id;
-    int thread_id;
+    long long thread_id;
     std::string name;
     std::string gmt_created;
     std::string gmt_modified;
@@ -20,9 +20,9 @@ public:
     explicit UserRepository(DatabaseManager& dbManager);
 
     bool createUser(const User& user);
-    std::optional<User> getUser(long long userId, long long chatId, int threadId);
+    std::optional<User> getUser(long long userId, long long chatId, long long threadId);
     bool updateUser(const User& user);
-    bool deleteUser(long long userId, long long chatId, int threadId);
+    bool deleteUser(long long userId, long long chatId, long long threadId);
 
 private:
     DatabaseManager& dbManager_;

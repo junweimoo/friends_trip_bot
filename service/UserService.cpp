@@ -12,7 +12,7 @@ bool UserService::registerUser(const User& user) {
     return userRepository_.createUser(user);
 }
 
-std::optional<User> UserService::getUserDetails(long long userId, long long chatId, int threadId) {
+std::optional<User> UserService::getUserDetails(long long userId, long long chatId, long long threadId) {
     return userRepository_.getUser(userId, chatId, threadId);
 }
 
@@ -25,7 +25,7 @@ bool UserService::updateUserName(const User& user) {
     return userRepository_.updateUser(user);
 }
 
-bool UserService::removeUser(long long userId, long long chatId, int threadId) {
+bool UserService::removeUser(long long userId, long long chatId, long long threadId) {
     // Check if user exists before deleting
     if (!userRepository_.getUser(userId, chatId, threadId).has_value()) {
         std::cout << "User not found for deletion." << std::endl;

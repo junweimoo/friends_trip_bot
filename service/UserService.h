@@ -10,9 +10,9 @@ public:
     explicit UserService(UserRepository& userRepository);
 
     bool registerUser(const User& user);
-    std::optional<User> getUserDetails(long long userId, long long chatId, int threadId);
+    std::optional<User> getUserDetails(long long userId, long long chatId, long long threadId);
     bool updateUserName(const User& user);
-    bool removeUser(long long userId, long long chatId, int threadId);
+    bool removeUser(long long userId, long long chatId, long long threadId);
 
 private:
     UserRepository& userRepository_;

@@ -22,7 +22,7 @@ bool UserRepository::createUser(const User& user) {
     }
 }
 
-std::optional<User> UserRepository::getUser(long long userId, long long chatId, int threadId) {
+std::optional<User> UserRepository::getUser(long long userId, long long chatId, long long threadId) {
     pqxx::connection* conn = dbManager_.getConnection();
     if (!conn || !conn->is_open()) return std::nullopt;
 
@@ -39,7 +39,7 @@ std::optional<User> UserRepository::getUser(long long userId, long long chatId, 
         return User{
             row["user_id"].as<long long>(),
             row["chat_id"].as<long long>(),
-            row["thread_id"].as<int>(),
+            row["thread_id"].as<long long>(),
             row["name"].c_str(),
             row["gmt_created"].c_str(),
             row["gmt_modified"].c_str()
@@ -68,7 +68,7 @@ bool UserRepository::updateUser(const User& user) {
     }
 }
 
-bool UserRepository::deleteUser(long long userId, long long chatId, int threadId) {
+bool UserRepository::deleteUser(long long userId, long long chatId, long long threadId) {
     pqxx::connection* conn = dbManager_.getConnection();
     if (!conn || !conn->is_open()) return false;
 
