@@ -51,6 +51,7 @@ void registerHandlers(bot::Bot& bot, const Services& services) {
         bot.sendMessage(msg.chat_id, "You said: " + msg.text);
     });
 
+    // register handler
     bot.registerCommandHandler("/register", [&bot, &userService = services.userService](const bot::Message& msg) {
         User user;
         user.user_id = msg.sender_id;
@@ -61,9 +62,12 @@ void registerHandlers(bot::Bot& bot, const Services& services) {
         if (userService.registerUser(user)) {
             bot.sendMessage(msg.chat_id, "Successfully registered!");
         } else {
-            bot.sendMessage(msg.chat_id, "User already exists.");
+            bot.sendMessage(msg.chat_id, "An error occured during registration.");
         }
     });
+
+    // pay handler
+
 }
 
 } // namespace handlers

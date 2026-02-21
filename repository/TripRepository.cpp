@@ -170,3 +170,33 @@ bool TripRepository::updateActiveTrip(long long chatId, long long threadId, long
         return false;
     }
 }
+
+std::optional<Trip> TripRepository::getActiveTrip(long long chatId, long long threadId) {
+    pqxx::connection* conn = dbManager_.getConnection();
+    if (!conn || !conn->is_open()) return std::nullopt;
+
+    try {
+        pqxx::work txn(*conn);
+        pqxx::result res = txn.exec_params(
+            "SELECT t.trip_id, t.chat_id, t.thread_id, t.name, t.gmt_created "
+            "FROM trips t "
+            "JOIN chats c ON t.trip_id = c.active_trip_id "
+            "WHERE c.chat_id = $1 AND c.thread_id = $2",
+            chatId, threadId
+        );
+
+        if (res.empty()) return std::nullopt;
+
+        const auto& row = res[0];
+        return Trip{
+            row["trip_id"].as<long long>(),
+            row["chat_id"].as<long long>(),
+            row["thread_id"].as<long long>(),
+            row["name"].c_str(),
+            row["gmt_created"].c_str()
+        };
+    } catch (const std::exception& e) {
+        std::cerr << "Error getting active trip: " << e.what() << std::endl;
+        return std::nullopt;
+    }
+}

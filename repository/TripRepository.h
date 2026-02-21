@@ -34,6 +34,8 @@ public:
 
     bool updateActiveTrip(long long chatId, long long threadId, long long tripId);
 
+    std::optional<Trip> getActiveTrip(long long chatId, long long threadId);
+
 private:
     DatabaseManager& dbManager_;
 };
