@@ -20,6 +20,7 @@ public:
     explicit UserRepository(DatabaseManager& dbManager);
 
     bool createUser(const User& user);
+    bool registerUserWithDefaultTrip(const User& user);
     std::optional<User> getUser(long long userId, long long chatId, long long threadId);
     bool updateUser(const User& user);
     bool deleteUser(long long userId, long long chatId, long long threadId);

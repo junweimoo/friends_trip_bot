@@ -4,12 +4,7 @@
 UserService::UserService(UserRepository& userRepository) : userRepository_(userRepository) {}
 
 bool UserService::registerUser(const User& user) {
-    // Check if user already exists
-    if (userRepository_.getUser(user.user_id, user.chat_id, user.thread_id).has_value()) {
-        std::cout << "User already exists." << std::endl;
-        return false;
-    }
-    return userRepository_.createUser(user);
+    return userRepository_.registerUserWithDefaultTrip(user);
 }
 
 std::optional<User> UserService::getUserDetails(long long userId, long long chatId, long long threadId) {

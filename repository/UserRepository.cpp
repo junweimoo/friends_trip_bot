@@ -22,6 +22,54 @@ bool UserRepository::createUser(const User& user) {
     }
 }
 
+bool UserRepository::registerUserWithDefaultTrip(const User& user) {
+    pqxx::connection* conn = dbManager_.getConnection();
+    if (!conn || !conn->is_open()) return false;
+
+    try {
+        pqxx::work txn(*conn);
+
+        // 1. Insert user
+        txn.exec_params(
+            "INSERT INTO users (user_id, chat_id, thread_id, name) VALUES ($1, $2, $3, $4) "
+            "ON CONFLICT (user_id, chat_id, thread_id) DO NOTHING",
+            user.user_id, user.chat_id, user.thread_id, user.name
+        );
+
+        // 2. Check if a trip already exists for this chat/thread
+        pqxx::result tripRes = txn.exec_params(
+            "SELECT trip_id FROM trips WHERE chat_id = $1 AND thread_id = $2 LIMIT 1",
+            user.chat_id, user.thread_id
+        );
+
+        long long tripId;
+        if (tripRes.empty()) {
+            // 3. Create default trip if none exists
+            pqxx::result newTripRes = txn.exec_params(
+                "INSERT INTO trips (chat_id, thread_id, name) VALUES ($1, $2, 'default') RETURNING trip_id",
+                user.chat_id, user.thread_id
+            );
+            tripId = newTripRes[0][0].as<long long>();
+        } else {
+            tripId = tripRes[0][0].as<long long>();
+        }
+
+        // 4. Create/Update chat with active trip
+        txn.exec_params(
+            "INSERT INTO chats (chat_id, thread_id, active_trip_id) VALUES ($1, $2, $3) "
+            "ON CONFLICT (chat_id, thread_id) DO UPDATE SET active_trip_id = EXCLUDED.active_trip_id "
+            "WHERE chats.active_trip_id IS NULL",
+            user.chat_id, user.thread_id, tripId
+        );
+
+        txn.commit();
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Error in registerUserWithDefaultTrip: " << e.what() << std::endl;
+        return false;
+    }
+}
+
 std::optional<User> UserRepository::getUser(long long userId, long long chatId, long long threadId) {
     pqxx::connection* conn = dbManager_.getConnection();
     if (!conn || !conn->is_open()) return std::nullopt;
