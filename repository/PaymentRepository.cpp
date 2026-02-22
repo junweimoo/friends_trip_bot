@@ -6,7 +6,7 @@
 
 PaymentRepository::PaymentRepository(DatabaseManager& dbManager) : dbManager_(dbManager) {}
 
-bool PaymentRepository::createPaymentGroup(long long tripId, const std::string& groupName, const std::vector<PaymentRecord>& records) {
+bool PaymentRepository::createPaymentGroup(const PaymentGroup& group) {
     pqxx::connection* conn = dbManager_.getConnection();
     if (!conn || !conn->is_open()) return false;
 
@@ -15,18 +15,18 @@ bool PaymentRepository::createPaymentGroup(long long tripId, const std::string& 
 
         // 1. Create the Payment Group
         pqxx::result groupRes = txn.exec_params(
-            "INSERT INTO payment_groups (trip_id, name) VALUES ($1, $2) RETURNING payment_group_id",
-            tripId, groupName
+            "INSERT INTO payment_groups (trip_id, name, total_amount, currency, payer_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING group_id",
+            group.trip_id, group.name, group.total_amount, group.currency, group.payer_user_id
         );
 
         if (groupRes.empty()) return false;
         long long groupId = groupRes[0][0].as<long long>();
 
         // 2. Create the Payment Records linked to the new group
-        for (const auto& rec : records) {
+        for (const auto& rec : group.records) {
             txn.exec_params(
-                "INSERT INTO payment_records (payment_group_id, user_id, amount) VALUES ($1, $2, $3)",
-                groupId, rec.user_id, rec.amount
+                "INSERT INTO payment_records (group_id, trip_id, amount, currency, from_user_id, to_user_id) VALUES ($1, $2, $3, $4, $5, $6)",
+                groupId, group.trip_id, rec.amount, rec.currency, rec.from_user_id, rec.to_user_id
             );
         }
 
@@ -72,7 +72,7 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
         pqxx::work txn(*conn);
 
         pqxx::result res = txn.exec_params(
-            "SELECT payment_group_id, trip_id, name, gmt_created FROM payment_groups "
+            "SELECT group_id, trip_id, name, total_amount, currency, payer_user_id, gmt_created FROM payment_groups "
             "WHERE trip_id = $1 "
             "ORDER BY gmt_created DESC "
             "LIMIT $2 OFFSET $3",
@@ -81,18 +81,21 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
 
         std::vector<long long> groupIds;
         for (const auto& row : res) {
-            long long gId = row["payment_group_id"].as<long long>();
+            long long gId = row["group_id"].as<long long>();
             groupIds.push_back(gId);
             groups.emplace_back(PaymentGroup{
                 gId,
                 row["trip_id"].as<long long>(),
                 row["name"].c_str(),
+                row["total_amount"].as<double>(),
+                row["currency"].c_str(),
+                row["payer_user_id"].as<long long>(),
                 row["gmt_created"].c_str(),
                 {}
             });
         }
 
-        if (!groupIds.empty()) {
+        if (groupIds.empty()) {
             return groups;
         }
 
@@ -104,8 +107,8 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
         idArray += "}";
 
         pqxx::result recordRes = txn.exec_params(
-            "SELECT payment_record_id, payment_group_id, user_id, amount "
-            "FROM payment_records WHERE payment_group_id = ANY($1::bigint[]) "
+            "SELECT record_id, group_id, trip_id, amount, currency, from_user_id, to_user_id, gmt_created "
+            "FROM payment_records WHERE group_id = ANY($1::bigint[]) "
             "ORDER BY gmt_created DESC",
             idArray
         );
@@ -116,14 +119,18 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
         }
 
         for (const auto& row : recordRes) {
-            long long gId = row["payment_group_id"].as<long long>();
+            long long gId = row["group_id"].as<long long>();
             auto it = groupMap.find(gId);
             if (it != groupMap.end()) {
                 it->second->records.emplace_back(PaymentRecord{
-                    row["payment_record_id"].as<long long>(),
+                    row["record_id"].as<long long>(),
                     gId,
-                    row["user_id"].as<long long>(),
-                    row["amount"].as<double>()
+                    row["trip_id"].as<long long>(),
+                    row["amount"].as<double>(),
+                    row["currency"].c_str(),
+                    row["from_user_id"].as<long long>(),
+                    row["to_user_id"].as<long long>(),
+                    row["gmt_created"].c_str()
                 });
             }
         }
@@ -142,28 +149,34 @@ std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripI
         pqxx::work txn(*conn);
 
         pqxx::result res = txn.exec_params(
-            "SELECT payment_group_id, trip_id, name, gmt_created FROM payment_groups "
+            "SELECT group_id, trip_id, name, total_amount, currency, payer_user_id, gmt_created FROM payment_groups "
             "WHERE trip_id = $1 "
             "ORDER BY gmt_created DESC",
             tripId
         );
 
+        std::vector<long long> groupIds;
         for (const auto& row : res) {
+            long long gId = row["group_id"].as<long long>();
+            groupIds.push_back(gId);
             groups.emplace_back(PaymentGroup{
-                row["payment_group_id"].as<long long>(),
+                gId,
                 row["trip_id"].as<long long>(),
                 row["name"].c_str(),
+                row["total_amount"].as<double>(),
+                row["currency"].c_str(),
+                row["payer_user_id"].as<long long>(),
                 row["gmt_created"].c_str(),
                 {}
             });
         }
 
-        if (!groups.empty()) {
+        if (groups.empty()) {
             return groups;
         }
 
         pqxx::result recordRes = txn.exec_params(
-            "SELECT payment_record_id, payment_group_id, user_id, amount "
+            "SELECT record_id, group_id, trip_id, amount, currency, from_user_id, to_user_id, gmt_created "
             "FROM payment_records WHERE trip_id = $1 "
             "ORDER BY gmt_created DESC",
             tripId
@@ -175,14 +188,18 @@ std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripI
         }
 
         for (const auto& row : recordRes) {
-            long long gId = row["payment_group_id"].as<long long>();
+            long long gId = row["group_id"].as<long long>();
             auto it = groupMap.find(gId);
             if (it != groupMap.end()) {
                 it->second->records.emplace_back(PaymentRecord{
-                    row["payment_record_id"].as<long long>(),
+                    row["record_id"].as<long long>(),
                     gId,
-                    row["user_id"].as<long long>(),
-                    row["amount"].as<double>()
+                    row["trip_id"].as<long long>(),
+                    row["amount"].as<double>(),
+                    row["currency"].c_str(),
+                    row["from_user_id"].as<long long>(),
+                    row["to_user_id"].as<long long>(),
+                    row["gmt_created"].c_str()
                 });
             }
         }
@@ -201,7 +218,7 @@ std::vector<PaymentRecord> PaymentRepository::getAllPaymentRecords(long long tri
         pqxx::work txn(*conn);
 
         pqxx::result res = txn.exec_params(
-            "SELECT payment_record_id, payment_group_id, user_id, amount "
+            "SELECT record_id, group_id, trip_id, amount, currency, from_user_id, to_user_id, gmt_created "
             "FROM payment_records "
             "WHERE trip_id = $1 "
             "ORDER BY gmt_created DESC",
@@ -210,10 +227,14 @@ std::vector<PaymentRecord> PaymentRepository::getAllPaymentRecords(long long tri
 
         for (const auto& row : res) {
             records.emplace_back(PaymentRecord{
-                row["payment_record_id"].as<long long>(),
-                row["payment_group_id"].as<long long>(),
-                row["user_id"].as<long long>(),
-                row["amount"].as<double>()
+                row["record_id"].as<long long>(),
+                row["group_id"].as<long long>(),
+                row["trip_id"].as<long long>(),
+                row["amount"].as<double>(),
+                row["currency"].c_str(),
+                row["from_user_id"].as<long long>(),
+                row["to_user_id"].as<long long>(),
+                row["gmt_created"].c_str()
             });
         }
     } catch (const std::exception& e) {
@@ -223,7 +244,6 @@ std::vector<PaymentRecord> PaymentRepository::getAllPaymentRecords(long long tri
 }
 
 bool PaymentRepository::deletePaymentGroup(long long paymentGroupId) {
-    std::vector<PaymentRecord> records;
     pqxx::connection* conn = dbManager_.getConnection();
     if (!conn || !conn->is_open()) return false;
 
@@ -236,8 +256,8 @@ bool PaymentRepository::deletePaymentGroup(long long paymentGroupId) {
         txn.commit();
         return res.affected_rows() > 0;
     } catch (const std::exception& e) {
-        std::cerr << "Error deleting payment record: " << e.what() << std::endl;
+        std::cerr << "Error deleting payment group: " << e.what() << std::endl;
     }
 
-    return true;
+    return false;
 }

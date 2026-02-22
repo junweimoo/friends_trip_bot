@@ -98,6 +98,34 @@ std::optional<User> UserRepository::getUser(long long userId, long long chatId, 
     }
 }
 
+std::vector<User> UserRepository::getUsersByChatAndThread(long long chatId, long long threadId) {
+    std::vector<User> users;
+    pqxx::connection* conn = dbManager_.getConnection();
+    if (!conn || !conn->is_open()) return users;
+
+    try {
+        pqxx::work txn(*conn);
+        pqxx::result res = txn.exec_params(
+            "SELECT user_id, chat_id, thread_id, name, gmt_created, gmt_modified FROM users WHERE chat_id = $1 AND thread_id = $2",
+            chatId, threadId
+        );
+
+        for (const auto& row : res) {
+            users.emplace_back(User{
+                row["user_id"].as<long long>(),
+                row["chat_id"].as<long long>(),
+                row["thread_id"].as<long long>(),
+                row["name"].c_str(),
+                row["gmt_created"].c_str(),
+                row["gmt_modified"].c_str()
+            });
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error getting users by chat and thread: " << e.what() << std::endl;
+    }
+    return users;
+}
+
 bool UserRepository::updateUser(const User& user) {
     pqxx::connection* conn = dbManager_.getConnection();
     if (!conn || !conn->is_open()) return false;

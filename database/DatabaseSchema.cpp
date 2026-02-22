@@ -56,6 +56,9 @@ void createTables(DatabaseManager& dbManager) {
                 group_id BIGSERIAL PRIMARY KEY,
                 trip_id BIGINT NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
                 name VARCHAR(255),
+                total_amount NUMERIC(15, 2),
+                currency VARCHAR(3),
+                payer_user_id BIGINT,
                 gmt_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_payment_groups_trip_id ON payment_groups(trip_id);
@@ -68,6 +71,9 @@ void createTables(DatabaseManager& dbManager) {
                 group_id BIGINT NOT NULL REFERENCES payment_groups(group_id) ON DELETE CASCADE,
                 trip_id BIGINT NOT NULL, 
                 amount NUMERIC(15, 2),
+                currency VARCHAR(3),
+                from_user_id BIGINT,
+                to_user_id BIGINT,
                 gmt_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_payment_records_trip_id ON payment_records(trip_id);

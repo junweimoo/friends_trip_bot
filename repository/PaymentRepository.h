@@ -10,14 +10,21 @@ class DatabaseManager;
 struct PaymentRecord {
     long long payment_record_id;
     long long payment_group_id;
-    long long user_id;
+    long long trip_id;
     double amount;
+    std::string currency;
+    long long from_user_id;
+    long long to_user_id;
+    std::string gmt_created;
 };
 
 struct PaymentGroup {
     long long payment_group_id;
     long long trip_id;
     std::string name;
+    double total_amount;
+    std::string currency;
+    long long payer_user_id;
     std::string gmt_created;
     std::vector<PaymentRecord> records;
 };
@@ -26,7 +33,7 @@ class PaymentRepository {
 public:
     explicit PaymentRepository(DatabaseManager& dbManager);
 
-    bool createPaymentGroup(long long tripId, const std::string& groupName, const std::vector<PaymentRecord>& records);
+    bool createPaymentGroup(const PaymentGroup& group);
 
     int getPaymentRecordCount(long long tripId);
 
