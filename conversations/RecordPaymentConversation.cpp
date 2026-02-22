@@ -1,12 +1,13 @@
 #include "RecordPaymentConversation.h"
-#include "../repository/UserRepository.h"
-#include "../repository/TripRepository.h"
 #include "../bot/Bot.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <cmath>
 #include <spdlog/spdlog.h>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 RecordPaymentConversation::RecordPaymentConversation(long long chat_id, long long thread_id, long long user_id, bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo)
     : Conversation(chat_id, user_id, bot), chat_id(chat_id), thread_id(thread_id), user_id(user_id), step(0), closed(false), userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo) {
@@ -80,6 +81,24 @@ bool RecordPaymentConversation::isClosed() const {
     return closed;
 }
 
+std::string RecordPaymentConversation::createCallbackData(int targetStep, const std::string& data) {
+    json j;
+    j["targetStep"] = targetStep;
+    j["data"] = data;
+    return j.dump();
+}
+
+bool RecordPaymentConversation::parseCallbackData(const std::string& jsonStr, int& targetStep, std::string& data) {
+    try {
+        auto j = json::parse(jsonStr);
+        targetStep = j["targetStep"].get<int>();
+        data = j["data"].get<std::string>();
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 void RecordPaymentConversation::handleDescription(const bot::Update& update) {
     if (update.message.message_id == 0) return;
 
@@ -138,7 +157,7 @@ void RecordPaymentConversation::handleAmount(const bot::Update& update) {
 
     std::vector<bot::InlineKeyboardButton> row;
     for (const auto& curr : currencies) {
-        row.push_back({curr, curr});
+        row.push_back({curr, createCallbackData(2, curr)});
         if (row.size() == 3) {
             keyboard.inline_keyboard.push_back(row);
             row.clear();
@@ -154,7 +173,11 @@ void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    paymentGroup.currency = update.callback_query.data;
+    int targetStep;
+    std::string data;
+    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+
+    paymentGroup.currency = data;
 
     // Update original message
     std::stringstream editedMsg;
@@ -164,7 +187,7 @@ void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
     // Ask for Payer
     bot::InlineKeyboardMarkup keyboard;
     for (const auto& [uid, user] : users) {
-        keyboard.inline_keyboard.push_back({{user.name, std::to_string(uid)}});
+        keyboard.inline_keyboard.push_back({{user.name, createCallbackData(3, std::to_string(uid))}});
     }
 
     step = 3;
@@ -175,8 +198,12 @@ void RecordPaymentConversation::handlePayer(const bot::Update& update) {
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
+    int targetStep;
+    std::string data;
+    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+
     try {
-        paymentGroup.payer_user_id = std::stoll(update.callback_query.data);
+        paymentGroup.payer_user_id = std::stoll(data);
     } catch (...) {
         return;
     }
@@ -188,9 +215,9 @@ void RecordPaymentConversation::handlePayer(const bot::Update& update) {
 
     // Ask for Recipient
     bot::InlineKeyboardMarkup keyboard;
-    keyboard.inline_keyboard.push_back({{"Split Equally", "split_equally"}});
-    keyboard.inline_keyboard.push_back({{"Split Manually", "split_manually"}});
-    keyboard.inline_keyboard.push_back({{"Single Recipient", "single_recipient"}});
+    keyboard.inline_keyboard.push_back({{"Split Equally", createCallbackData(4, "split_equally")}});
+    keyboard.inline_keyboard.push_back({{"Split Manually", createCallbackData(4, "split_manually")}});
+    keyboard.inline_keyboard.push_back({{"Single Recipient", createCallbackData(4, "single_recipient")}});
 
     step = 4;
     active_message_id = bot_.sendMessage(chat_id,  "Who is this for?", &keyboard);
@@ -200,7 +227,9 @@ void RecordPaymentConversation::handleRecipient(const bot::Update& update) {
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    std::string data = update.callback_query.data;
+    int targetStep;
+    std::string data;
+    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
 
     if (data == "split_manually") {
         for (const auto& [uid, user] : users) {
@@ -229,7 +258,7 @@ void RecordPaymentConversation::sendSingleRecipients(bool editMessage) {
 
     bot::InlineKeyboardMarkup keyboard;
     for (const auto& [uid, user] : users) {
-        keyboard.inline_keyboard.push_back({{user.name, std::to_string(uid)}});
+        keyboard.inline_keyboard.push_back({{user.name, createCallbackData(8, std::to_string(uid))}});
     }
 
     if (editMessage) {
@@ -243,9 +272,13 @@ void RecordPaymentConversation::handleSingleRecipient(const bot::Update& update)
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
+    int targetStep;
+    std::string data;
+    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+
     long long recipientId;
     try {
-        recipientId = std::stoll(update.callback_query.data);
+        recipientId = std::stoll(data);
     } catch (...) {
         return;
     }
@@ -268,10 +301,10 @@ void RecordPaymentConversation::sendEqualSplitRecipients(bool editMessage) {
 
     bot::InlineKeyboardMarkup keyboard;
     if (!allocatedAmounts.empty()) {
-        keyboard.inline_keyboard.push_back({{"Done", "done"}});
+        keyboard.inline_keyboard.push_back({{"Done", createCallbackData(7, "done")}});
     }
-    keyboard.inline_keyboard.push_back({{"Select all", "select_all"}});
-    keyboard.inline_keyboard.push_back({{"Unselect all", "unselect_all"}});
+    keyboard.inline_keyboard.push_back({{"Select all", createCallbackData(7, "select_all")}});
+    keyboard.inline_keyboard.push_back({{"Unselect all", createCallbackData(7, "unselect_all")}});
     for (const auto& [uid, user] : users) {
         std::stringstream btnText;
         if (allocatedAmounts.find(uid) != allocatedAmounts.end()) {
@@ -279,7 +312,7 @@ void RecordPaymentConversation::sendEqualSplitRecipients(bool editMessage) {
         } else {
             btnText << user.name;
         }
-        keyboard.inline_keyboard.push_back({{btnText.str(), std::to_string(uid)}});
+        keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(7, std::to_string(uid))}});
     }
 
     if (editMessage) {
@@ -293,7 +326,10 @@ void RecordPaymentConversation::handleEqualSplitRecipients(const bot::Update& up
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    std::string data = update.callback_query.data;
+    int targetStep;
+    std::string data;
+    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+
     if (data == "done") {
         completeConversation();
         return;
@@ -352,13 +388,13 @@ void RecordPaymentConversation::sendManualRecipients(bool editMessage) {
 
     bot::InlineKeyboardMarkup keyboard;
     if (std::abs(currentAllocated - paymentGroup.total_amount) < 0.01) {
-        keyboard.inline_keyboard.push_back({{"Done", "done"}});
+        keyboard.inline_keyboard.push_back({{"Done", createCallbackData(5, "done")}});
     }
 
     for (const auto& [uid, user] : users) {
         std::stringstream btnText;
         btnText << user.name << " (" << std::fixed << std::setprecision(2) << allocatedAmounts[uid] << ")";
-        keyboard.inline_keyboard.push_back({{btnText.str(), std::to_string(uid)}});
+        keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(5, std::to_string(uid))}});
     }
 
     if (editMessage) {
@@ -372,7 +408,9 @@ void RecordPaymentConversation::handleManualRecipient(const bot::Update& update)
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    std::string data = update.callback_query.data;
+    int targetStep;
+    std::string data;
+    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
 
     if (data == "done") {
         // Check if total allocated matches total amount

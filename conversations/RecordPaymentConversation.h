@@ -6,6 +6,7 @@
 #include "../repository/TripRepository.h"
 #include "../repository/UserRepository.h"
 #include <unordered_map>
+#include <string>
 
 class RecordPaymentConversation : public bot::Conversation {
 public:
@@ -31,6 +32,9 @@ private:
     void sendManualRecipients(bool editMessage);
     void completeConversation();
     void cancelConversation();
+
+    std::string createCallbackData(int targetStep, const std::string& data);
+    bool parseCallbackData(const std::string& jsonStr, int& targetStep, std::string& data);
 
     std::mutex mutex_;
 
