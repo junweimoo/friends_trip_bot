@@ -61,8 +61,9 @@ void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
     }
 }
 
-void Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard) {
+long long Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard) {
     CURL *curl = curl_easy_init();
+    long long messageId = -1;
     if(curl) {
         char *output = curl_easy_escape(curl, text.c_str(), text.length());
         if(output) {
@@ -82,15 +83,31 @@ void Bot::sendMessage(long long chatId, const std::string& text, const InlineKey
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
 
+            std::string responseBuffer;
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBuffer);
+
             CURLcode res = curl_easy_perform(curl);
             if(res != CURLE_OK) {
                  fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            } else {
+                try {
+                    auto jsonResponse = json::parse(responseBuffer);
+                    if (jsonResponse.contains("ok") && jsonResponse["ok"].get<bool>()) {
+                        if (jsonResponse.contains("result") && jsonResponse["result"].contains("message_id")) {
+                            messageId = jsonResponse["result"]["message_id"].get<long long>();
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "JSON parse error in sendMessage: " << e.what() << std::endl;
+                }
             }
 
             curl_free(output);
         }
         curl_easy_cleanup(curl);
     }
+    return messageId;
 }
 
 void Bot::editMessage(long long chatId, long long messageId, const std::string& text, const InlineKeyboardMarkup* keyboard) {

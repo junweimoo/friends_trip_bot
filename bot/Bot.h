@@ -46,7 +46,7 @@ public:
 
     void registerConversation(std::unique_ptr<Conversation> conversation);
 
-    void sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);
+    long long sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);
     void editMessage(long long chatId, long long messageId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr);
 
 private:
