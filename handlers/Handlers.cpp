@@ -1,14 +1,15 @@
 #include "Handlers.h"
 #include "../conversations/DemoConversation.h"
+#include "../conversations/RecordPaymentConversation.h"
 #include <iostream>
 #include <memory>
 
 namespace handlers {
 
-void registerHandlers(bot::Bot& bot, const Services& services) {
+void registerHandlers(bot::Bot& bot, const Services& services, const Repositories& repos) {
     // Register /start command handler
     bot.registerCommandHandler("/start", [&bot](const bot::Message& msg) {
-        std::cout << "Received /start from " << msg.chat_id << std::endl;
+        // std::cout << "Received /start from " << msg.chat_id << std::endl;
         bot.sendMessage(msg.chat_id, "Hello! I am your Friends Trip Bot.");
     });
 
@@ -34,7 +35,7 @@ void registerHandlers(bot::Bot& bot, const Services& services) {
 
     // Register callback handler to edit the message when a button is pressed
     bot.registerCallbackHandler([&bot](const bot::CallbackQuery& query) {
-        std::cout << "Received callback: " << query.data << " from " << query.sender_name << std::endl;
+        // std::cout << "Received callback: " << query.data << " from " << query.sender_name << std::endl;
 
         bot::InlineKeyboardMarkup keyboard;
         bot::InlineKeyboardButton btn1{"Option 1", "opt_1"};
@@ -47,7 +48,7 @@ void registerHandlers(bot::Bot& bot, const Services& services) {
 
     // Register generic text handler
     bot.registerTextHandler([&bot](const bot::Message& msg) {
-        std::cout << "Received text from " << msg.chat_id << ": " << msg.text << std::endl;
+        // std::cout << "Received text from " << msg.chat_id << ": " << msg.text << std::endl;
         bot.sendMessage(msg.chat_id, "You said: " + msg.text);
     });
 
@@ -67,7 +68,12 @@ void registerHandlers(bot::Bot& bot, const Services& services) {
     });
 
     // pay handler
-
+    bot.registerCommandHandler("/pay", [&bot, &repos](const bot::Message& msg) {
+        auto convo = std::make_unique<RecordPaymentConversation>(
+            msg.chat_id, 0, msg.sender_id,
+            bot, repos.userRepository, repos.tripRepository, repos.paymentRepository);
+        bot.registerConversation(std::move(convo));
+    });
 }
 
 } // namespace handlers

@@ -9,6 +9,8 @@
 #include "database/DatabaseSchema.h"
 #include "handlers/Handlers.h"
 #include "repository/UserRepository.h"
+#include "repository/PaymentRepository.h"
+#include "repository/TripRepository.h"
 #include "service/UserService.h"
 
 void loadEnv(const std::string& filename) {
@@ -42,7 +44,11 @@ int main() {
     const char* dbPass = std::getenv("POSTGRES_PASSWORD");
 
     std::unique_ptr<DatabaseManager> db;
+
     std::unique_ptr<UserRepository> userRepo;
+    std::unique_ptr<PaymentRepository> paymentRepo;
+    std::unique_ptr<TripRepository> tripRepo;
+
     std::unique_ptr<UserService> userService;
 
     if (dbHost && dbPort && dbName && dbUser && dbPass) {
@@ -57,6 +63,9 @@ int main() {
         DatabaseSchema::createTables(*db);
 
         userRepo = std::make_unique<UserRepository>(*db);
+        paymentRepo = std::make_unique<PaymentRepository>(*db);
+        tripRepo = std::make_unique<TripRepository>(*db);
+
         userService = std::make_unique<UserService>(*userRepo);
     } else {
         std::cerr << "Warning: Database environment variables not fully set. Skipping DB connection." << std::endl;
@@ -73,7 +82,8 @@ int main() {
 
     // Register all handlers
     handlers::Services services{*userService};
-    handlers::registerHandlers(myBot, services);
+    handlers::Repositories repos{*userRepo, *tripRepo, *paymentRepo};
+    handlers::registerHandlers(myBot, services, repos);
 
     // Start the bot
     myBot.start();

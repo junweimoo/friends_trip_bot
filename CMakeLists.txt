@@ -13,6 +13,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
+# Fetch spdlog
+FetchContent_Declare(
+    spdlog
+    URL https://github.com/gabime/spdlog/archive/refs/tags/v1.12.0.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(spdlog)
+
 # Find PostgreSQL (libpq)
 find_package(PostgreSQL REQUIRED)
 
@@ -40,6 +48,7 @@ add_executable(friends_trip_bot
     repository/PaymentRepository.cpp
     service/UserService.cpp
     conversations/DemoConversation.cpp
+    conversations/RecordPaymentConversation.cpp
     handlers/Handlers.cpp
 )
 
@@ -49,4 +58,5 @@ target_link_libraries(friends_trip_bot
     nlohmann_json::nlohmann_json
     pqxx
     PostgreSQL::PostgreSQL
+    spdlog::spdlog
 )

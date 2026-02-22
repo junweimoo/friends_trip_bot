@@ -61,7 +61,7 @@ void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
     }
 }
 
-long long Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard) {
+long long Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard, const std::string& parseMode) {
     CURL *curl = curl_easy_init();
     long long messageId = -1;
     if(curl) {
@@ -69,6 +69,10 @@ long long Bot::sendMessage(long long chatId, const std::string& text, const Inli
         if(output) {
             std::string encodedText(output);
             std::string url = baseUrl + "sendMessage?chat_id=" + std::to_string(chatId) + "&text=" + encodedText;
+
+            if (!parseMode.empty()) {
+                url += "&parse_mode=" + parseMode;
+            }
 
             if (keyboard) {
                 json j = *keyboard;
@@ -110,7 +114,7 @@ long long Bot::sendMessage(long long chatId, const std::string& text, const Inli
     return messageId;
 }
 
-void Bot::editMessage(long long chatId, long long messageId, const std::string& text, const InlineKeyboardMarkup* keyboard) {
+void Bot::editMessage(long long chatId, long long messageId, const std::string& text, const InlineKeyboardMarkup* keyboard, const std::string& parseMode) {
     CURL *curl = curl_easy_init();
     if(curl) {
         char *output = curl_easy_escape(curl, text.c_str(), text.length());
@@ -119,6 +123,10 @@ void Bot::editMessage(long long chatId, long long messageId, const std::string& 
             std::string url = baseUrl + "editMessageText?chat_id=" + std::to_string(chatId) +
                              "&message_id=" + std::to_string(messageId) +
                              "&text=" + encodedText;
+
+            if (!parseMode.empty()) {
+                url += "&parse_mode=" + parseMode;
+            }
 
             if (keyboard) {
                 json j = *keyboard;
@@ -133,12 +141,47 @@ void Bot::editMessage(long long chatId, long long messageId, const std::string& 
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
 
+            // Capture the response to prevent libcurl from printing it to stdout
+            std::string responseBuffer;
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBuffer);
+
             CURLcode res = curl_easy_perform(curl);
             if(res != CURLE_OK) {
                  fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
             }
 
             curl_free(output);
+        }
+        curl_easy_cleanup(curl);
+    }
+}
+
+void Bot::answerCallbackQuery(const std::string& callbackQueryId, const std::string& text, bool showAlert) {
+    CURL *curl = curl_easy_init();
+    if(curl) {
+        std::string url = baseUrl + "answerCallbackQuery?callback_query_id=" + callbackQueryId;
+        if (!text.empty()) {
+            char *encodedText = curl_easy_escape(curl, text.c_str(), text.length());
+            if (encodedText) {
+                url += "&text=" + std::string(encodedText);
+                curl_free(encodedText);
+            }
+        }
+        if (showAlert) {
+            url += "&show_alert=true";
+        }
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+        std::string responseBuffer;
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBuffer);
+
+        CURLcode res = curl_easy_perform(curl);
+        if(res != CURLE_OK) {
+             fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
         }
         curl_easy_cleanup(curl);
     }
