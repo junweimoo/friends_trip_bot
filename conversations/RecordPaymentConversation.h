@@ -45,10 +45,6 @@ private:
     std::unordered_map<long long, User> users;
     Trip trip;
 
-    long long chat_id;
-    long long thread_id;
-    long long user_id;
-
     std::unordered_map<long long, double> allocatedAmounts;
     long long current_recipient_id;
 

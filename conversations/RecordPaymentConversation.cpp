@@ -10,11 +10,11 @@
 using json = nlohmann::json;
 
 RecordPaymentConversation::RecordPaymentConversation(long long chat_id, long long thread_id, long long user_id, bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo)
-    : Conversation(chat_id, user_id, bot), chat_id(chat_id), thread_id(thread_id), user_id(user_id), step(0), closed(false), userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo) {
-
+    : Conversation(chat_id, thread_id, user_id, bot),
+      current_recipient_id(0), step(0), closed(false), userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo) {
     // Fetch all users in the chat
     std::vector<User> chatUsers = userRepo_.getUsersByChatAndThread(chat_id, thread_id);
-    for (const auto& u : chatUsers) {
+    for (const auto &u: chatUsers) {
         users[u.user_id] = u;
     }
 
@@ -29,7 +29,7 @@ RecordPaymentConversation::RecordPaymentConversation(long long chat_id, long lon
         return;
     }
 
-    active_message_id = bot.sendMessage(chat_id,"Enter a name for this payment");
+    active_message_id = bot.sendMessage(chat_id, "Enter a name for this payment");
 }
 
 RecordPaymentConversation::~RecordPaymentConversation() {}
@@ -500,6 +500,6 @@ void RecordPaymentConversation::completeConversation() {
 }
 
 void RecordPaymentConversation::cancelConversation() {
-    bot_.sendMessage(chat_id, "Conversation cancelled.");
+    bot_.sendMessage(chat_id, "Record cancelled.");
     closed = true;
 }

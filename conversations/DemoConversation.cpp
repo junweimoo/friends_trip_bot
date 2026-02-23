@@ -6,8 +6,8 @@
 
 namespace bot {
 
-DemoConversation::DemoConversation(long long chat_id, long long user_id, Bot& bot)
-    : Conversation(chat_id, user_id, bot), step_(1), closed_(false) {
+DemoConversation::DemoConversation(long long chat_id, long long thread_id, long long user_id, Bot& bot)
+    : Conversation(chat_id, thread_id, user_id, bot), step_(1), closed_(false) {
     conversationHandlers[1] = [this](const bot::Update& u) { handleStep1(u); };
     conversationHandlers[2] = [this](const bot::Update& u) { handleStep2(u); };
 }

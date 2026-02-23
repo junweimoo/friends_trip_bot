@@ -49,6 +49,7 @@ add_executable(friends_trip_bot
     service/UserService.cpp
     conversations/DemoConversation.cpp
     conversations/RecordPaymentConversation.cpp
+    conversations/ListPaymentsConversation.cpp
     handlers/Handlers.cpp
 )
 

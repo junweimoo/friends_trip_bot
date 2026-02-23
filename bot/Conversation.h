@@ -14,17 +14,19 @@ class Bot;
 
 class Conversation {
 public:
-    explicit Conversation(long long chat_id, long long user_id, Bot& bot);
+    explicit Conversation(long long chat_id, long long thread_id, long long user_id, Bot& bot);
     virtual ~Conversation() = default;
 
     virtual void handleUpdate(const bot::Update& update) = 0;
     virtual bool isClosed() const = 0;
 
     long long getChatId() const;
+    long long getThreadId() const;
     long long getUserId() const;
 
 protected:
     long long chat_id;
+    long long thread_id;
     long long user_id;
     Bot& bot_;
 };

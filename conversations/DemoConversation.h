@@ -9,7 +9,7 @@ namespace bot {
 
 class DemoConversation : public Conversation {
 public:
-    DemoConversation(long long chat_id, long long user_id, Bot& bot);
+    DemoConversation(long long chat_id, long long thread_id, long long user_id, Bot& bot);
     ~DemoConversation() override;
 
     void handleUpdate(const bot::Update& update) override;
