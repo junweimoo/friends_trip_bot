@@ -32,7 +32,11 @@ RecordPaymentConversation::RecordPaymentConversation(long long chat_id, long lon
     active_message_id = bot.sendMessage(chat_id, "Enter a name for this payment");
 }
 
-RecordPaymentConversation::~RecordPaymentConversation() {}
+RecordPaymentConversation::~RecordPaymentConversation() {
+    if (active_message_id != 0) {
+        bot_.editMessage(chat_id, active_message_id, "Record cancelled.");
+    }
+}
 
 void RecordPaymentConversation::handleUpdate(const bot::Update& update) {
     std::lock_guard<std::mutex> lock(mutex_);

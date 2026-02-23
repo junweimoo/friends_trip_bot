@@ -34,7 +34,11 @@ ListPaymentsConversation::ListPaymentsConversation(long long chat_id, long long 
     sendCurrentPage(false);
 }
 
-ListPaymentsConversation::~ListPaymentsConversation() {}
+ListPaymentsConversation::~ListPaymentsConversation() {
+    if (active_message_id != 0) {
+        bot_.editMessage(chat_id, active_message_id, "List closed.");
+    }
+}
 
 void ListPaymentsConversation::handleUpdate(const bot::Update& update) {
     if (closed) return;

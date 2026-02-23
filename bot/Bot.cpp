@@ -244,20 +244,43 @@ void Bot::poll() {
             lastUpdateId = update.update_id + 1;
         }
 
-        // Handle Conversations
+        // Extract fields
         long long chatId = 0;
         long long userId = 0;
+        Message msg;
 
         if (update.message.message_id != 0) {
             chatId = update.message.chat.id;
             userId = update.message.from.id;
+
+            msg.update_id = update.update_id;
+            msg.message_id = update.message.message_id;
+            msg.chat_id = update.message.chat.id;
+            msg.sender_id = update.message.from.id;
+            msg.sender_name = update.message.from.first_name;
+            msg.text = update.message.text;
         } else if (!update.callback_query.id.empty()) {
             chatId = update.callback_query.message.chat.id;
             userId = update.callback_query.from.id;
         }
 
-        bool handled = false;
-        if (chatId != 0 && userId != 0) {
+        // Handle Commands
+        bool isCommand = false;
+        if (update.message.message_id != 0 && !msg.text.empty()) {
+            if (msg.text[0] == '/') {
+                size_t spacePos = msg.text.find(' ');
+                std::string command = (spacePos == std::string::npos) ? msg.text : msg.text.substr(0, spacePos);
+                if (commandHandlers.find(command) != commandHandlers.end()) {
+                    // Dispatch command
+                    std::thread(commandHandlers[command], msg).detach();
+                    isCommand = true;
+                }
+            }
+        }
+
+        // Handle Conversations
+        bool isConversation = false;
+        if (!isCommand && chatId != 0 && userId != 0) {
             std::shared_ptr<ConversationEntry> entry = nullptr;
             {
                 // Use shared_lock here since this is a read-only operation
@@ -293,43 +316,20 @@ void Bot::poll() {
                         }
                     }
                 }).detach();
-                handled = true;
+                isConversation = true;
             }
         }
 
-        if (handled) continue;
-
-        // Handle Messages
-        if (update.message.message_id != 0) {
-            Message msg;
-            msg.update_id = update.update_id;
-            msg.message_id = update.message.message_id;
-            msg.chat_id = update.message.chat.id;
-            msg.sender_id = update.message.from.id;
-            msg.sender_name = update.message.from.first_name;
-            msg.text = update.message.text;
-
-            if (!msg.text.empty()) {
-                // Handle Commands
-                if (msg.text[0] == '/') {
-                    size_t spacePos = msg.text.find(' ');
-                    std::string command = (spacePos == std::string::npos) ? msg.text : msg.text.substr(0, spacePos);
-                    if (commandHandlers.find(command) != commandHandlers.end()) {
-                        // Dispatch command
-                        std::thread(commandHandlers[command], msg).detach();
-                    }
-                // Handle Text
-                } else {
-                    if (textHandler) {
-                        // Dispatch text
-                        std::thread(textHandler, msg).detach();
-                    }
-                }
+        // Handle Text Messages
+        if (!isCommand && !isConversation && update.message.message_id != 0 && !msg.text.empty()) {
+            if (textHandler) {
+                // Dispatch text
+                std::thread(textHandler, msg).detach();
             }
         }
 
         // Handle Callback Queries
-        if (!update.callback_query.id.empty()) {
+        if (!isCommand && !isConversation && !update.callback_query.id.empty()) {
             CallbackQuery query;
             query.update_id = update.update_id;
             query.chat_id = update.callback_query.message.chat.id;
