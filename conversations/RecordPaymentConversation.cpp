@@ -33,7 +33,7 @@ RecordPaymentConversation::RecordPaymentConversation(long long chat_id, long lon
 }
 
 RecordPaymentConversation::~RecordPaymentConversation() {
-    if (active_message_id != 0) {
+    if (!closed && active_message_id != 0) {
         bot_.editMessage(chat_id, active_message_id, "Record cancelled.");
     }
 }
@@ -470,11 +470,12 @@ void RecordPaymentConversation::handleManualAmount(const bot::Update& update) {
 void RecordPaymentConversation::completeConversation() {
     paymentGroup.records.clear();
 
+    std::chrono::system_clock::time_point current_time{};
     // Create records from allocatedAmounts
     for (const auto& [uid, amount] : allocatedAmounts) {
         if (amount > 0) {
             paymentGroup.records.push_back({
-                0, 0, paymentGroup.trip_id, amount, paymentGroup.currency, paymentGroup.payer_user_id, uid, ""
+                0, 0, paymentGroup.trip_id, amount, paymentGroup.currency, paymentGroup.payer_user_id, uid, current_time
             });
         }
     }

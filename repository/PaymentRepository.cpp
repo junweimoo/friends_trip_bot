@@ -1,8 +1,10 @@
 #include "PaymentRepository.h"
 #include "../database/DatabaseManager.h"
+#include "../utils/utils.h"
 #include <iostream>
 #include <pqxx/pqxx>
 #include <map>
+#include <chrono>
 
 PaymentRepository::PaymentRepository(DatabaseManager& dbManager) : dbManager_(dbManager) {}
 
@@ -90,7 +92,7 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
                 row["total_amount"].as<double>(),
                 row["currency"].c_str(),
                 row["payer_user_id"].as<long long>(),
-                row["gmt_created"].c_str(),
+                utils::parseTimestamp(row["gmt_created"].c_str()),
                 {}
             });
         }
@@ -130,7 +132,7 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
                     row["currency"].c_str(),
                     row["from_user_id"].as<long long>(),
                     row["to_user_id"].as<long long>(),
-                    row["gmt_created"].c_str()
+                    utils::parseTimestamp(row["gmt_created"].c_str())
                 });
             }
         }
@@ -166,7 +168,7 @@ std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripI
                 row["total_amount"].as<double>(),
                 row["currency"].c_str(),
                 row["payer_user_id"].as<long long>(),
-                row["gmt_created"].c_str(),
+                utils::parseTimestamp(row["gmt_created"].c_str()),
                 {}
             });
         }
@@ -199,7 +201,7 @@ std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripI
                     row["currency"].c_str(),
                     row["from_user_id"].as<long long>(),
                     row["to_user_id"].as<long long>(),
-                    row["gmt_created"].c_str()
+                    utils::parseTimestamp(row["gmt_created"].c_str())
                 });
             }
         }
@@ -234,7 +236,7 @@ std::vector<PaymentRecord> PaymentRepository::getAllPaymentRecords(long long tri
                 row["currency"].c_str(),
                 row["from_user_id"].as<long long>(),
                 row["to_user_id"].as<long long>(),
-                row["gmt_created"].c_str()
+                utils::parseTimestamp(row["gmt_created"].c_str())
             });
         }
     } catch (const std::exception& e) {

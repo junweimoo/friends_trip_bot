@@ -3,7 +3,7 @@
 
 #include <string>
 #include <vector>
-#include <optional>
+#include <chrono>
 
 class DatabaseManager;
 
@@ -15,7 +15,7 @@ struct PaymentRecord {
     std::string currency;
     long long from_user_id;
     long long to_user_id;
-    std::string gmt_created;
+    std::chrono::system_clock::time_point gmt_created;
 };
 
 struct PaymentGroup {
@@ -25,7 +25,7 @@ struct PaymentGroup {
     double total_amount;
     std::string currency;
     long long payer_user_id;
-    std::string gmt_created;
+    std::chrono::system_clock::time_point gmt_created;
     std::vector<PaymentRecord> records;
 };
 

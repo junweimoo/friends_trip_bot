@@ -1,9 +1,11 @@
 #include "ListPaymentsConversation.h"
 #include "../bot/Bot.h"
+#include "../utils/utils.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <cmath>
+#include <chrono>
 
 ListPaymentsConversation::ListPaymentsConversation(long long chat_id, long long thread_id, long long user_id, bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo)
     : Conversation(chat_id, thread_id, user_id, bot), pageSize(10), currentPage(1), closed(false), active_message_id(0), userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo) {
@@ -35,7 +37,7 @@ ListPaymentsConversation::ListPaymentsConversation(long long chat_id, long long 
 }
 
 ListPaymentsConversation::~ListPaymentsConversation() {
-    if (active_message_id != 0) {
+    if (!closed && active_message_id != 0) {
         bot_.editMessage(chat_id, active_message_id, "List closed.");
     }
 }
@@ -104,7 +106,8 @@ void ListPaymentsConversation::sendCurrentPage(bool editMessage) {
     } else {
         for (int i = startIdx; i < endIdx; ++i) {
             const auto& group = paymentGroups[i];
-            ss << "📂 " << i + 1 << ". <b>" << group.name << "</b>\n";
+
+            ss << "📂 " << i + 1 << ". <b>" << group.name << "</b> (" << utils::formatTimestamp(group.gmt_created, 8) << ")\n";
             ss << "<b>" << std::fixed << std::setprecision(2) << group.total_amount << " " << group.currency << "</b> paid by <b>" << users[group.payer_user_id].name << "</b>\n";
 
             for (const auto& record : group.records) {
