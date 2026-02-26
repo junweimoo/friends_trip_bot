@@ -50,17 +50,15 @@ bool UserRepository::registerUserWithDefaultTrip(const User& user) {
                 user.chat_id, user.thread_id
             );
             tripId = newTripRes[0][0].as<long long>();
-        } else {
-            tripId = tripRes[0][0].as<long long>();
-        }
 
-        // 4. Create/Update chat with active trip
-        txn.exec_params(
-            "INSERT INTO chats (chat_id, thread_id, active_trip_id) VALUES ($1, $2, $3) "
-            "ON CONFLICT (chat_id, thread_id) DO UPDATE SET active_trip_id = EXCLUDED.active_trip_id "
-            "WHERE chats.active_trip_id IS NULL",
-            user.chat_id, user.thread_id, tripId
-        );
+            // 4. Create/Update chat with active trip
+            txn.exec_params(
+                "INSERT INTO chats (chat_id, thread_id, active_trip_id) VALUES ($1, $2, $3) "
+                "ON CONFLICT (chat_id, thread_id) DO UPDATE SET active_trip_id = EXCLUDED.active_trip_id "
+                "WHERE chats.active_trip_id IS NULL",
+                user.chat_id, user.thread_id, tripId
+            );
+        }
 
         txn.commit();
         return true;
