@@ -17,6 +17,18 @@ public:
     bool isClosed() const override;
 
 private:
+    enum class State {
+        Description,
+        Amount,
+        Currency,
+        Payer,
+        Recipient,
+        ManualRecipient,
+        ManualAmount,
+        EqualSplit,
+        SingleRecipient,
+    };
+
     void handleDescription(const bot::Update& update);
     void handleAmount(const bot::Update& update);
     void handleCurrency(const bot::Update& update);
@@ -33,12 +45,12 @@ private:
     void completeConversation();
     void cancelConversation();
 
-    std::string createCallbackData(int targetStep, const std::string& data);
-    bool parseCallbackData(const std::string& jsonStr, int& targetStep, std::string& data);
+    std::string createCallbackData(State targetState, const std::string& data);
+    bool parseCallbackData(const std::string& jsonStr, State& targetState, std::string& data);
 
     std::mutex mutex_;
 
-    int step;
+    State currentState_;
     bool closed;
     long long active_message_id;
 

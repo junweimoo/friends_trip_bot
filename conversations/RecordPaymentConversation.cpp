@@ -11,7 +11,7 @@ using json = nlohmann::json;
 
 RecordPaymentConversation::RecordPaymentConversation(long long chat_id, long long thread_id, long long user_id, bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo)
     : Conversation(chat_id, thread_id, user_id, bot),
-      current_recipient_id(0), step(0), closed(false), userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo) {
+      current_recipient_id(0), currentState_(State::Description), closed(false), userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo) {
     // Fetch all users in the chat
     std::vector<User> chatUsers = userRepo_.getUsersByChatAndThread(chat_id, thread_id);
     for (const auto &u: chatUsers) {
@@ -48,35 +48,33 @@ void RecordPaymentConversation::handleUpdate(const bot::Update& update) {
         return;
     }
 
-    switch (step) {
-        case 0:
+    switch (currentState_) {
+        case State::Description:
             handleDescription(update);
             break;
-        case 1:
+        case State::Amount:
             handleAmount(update);
             break;
-        case 2:
+        case State::Currency:
             handleCurrency(update);
             break;
-        case 3:
+        case State::Payer:
             handlePayer(update);
             break;
-        case 4:
+        case State::Recipient:
             handleRecipient(update);
             break;
-        case 5:
+        case State::ManualRecipient:
             handleManualRecipient(update);
             break;
-        case 6:
+        case State::ManualAmount:
             handleManualAmount(update);
             break;
-        case 7:
+        case State::EqualSplit:
             handleEqualSplitRecipients(update);
             break;
-        case 8:
+        case State::SingleRecipient:
             handleSingleRecipient(update);
-            break;
-        default:
             break;
     }
 }
@@ -85,17 +83,17 @@ bool RecordPaymentConversation::isClosed() const {
     return closed;
 }
 
-std::string RecordPaymentConversation::createCallbackData(int targetStep, const std::string& data) {
+std::string RecordPaymentConversation::createCallbackData(State targetState, const std::string& data) {
     json j;
-    j["targetStep"] = targetStep;
+    j["targetStep"] = static_cast<int>(targetState);
     j["data"] = data;
     return j.dump();
 }
 
-bool RecordPaymentConversation::parseCallbackData(const std::string& jsonStr, int& targetStep, std::string& data) {
+bool RecordPaymentConversation::parseCallbackData(const std::string& jsonStr, State& targetState, std::string& data) {
     try {
         auto j = json::parse(jsonStr);
-        targetStep = j["targetStep"].get<int>();
+        targetState = static_cast<State>(j["targetStep"].get<int>());
         data = j["data"].get<std::string>();
         return true;
     } catch (...) {
@@ -120,7 +118,7 @@ void RecordPaymentConversation::handleDescription(const bot::Update& update) {
     bot_.editMessage(chat_id, active_message_id, editedMsg.str());
 
     // Ask for amount
-    step = 1;
+    currentState_ = State::Amount;
     active_message_id = bot_.sendMessage(chat_id, "Enter the amount (e.g. 123 or 123.00):");
 }
 
@@ -161,7 +159,7 @@ void RecordPaymentConversation::handleAmount(const bot::Update& update) {
 
     std::vector<bot::InlineKeyboardButton> row;
     for (const auto& curr : currencies) {
-        row.push_back({curr, createCallbackData(2, curr)});
+        row.push_back({curr, createCallbackData(State::Currency, curr)});
         if (row.size() == 3) {
             keyboard.inline_keyboard.push_back(row);
             row.clear();
@@ -169,7 +167,7 @@ void RecordPaymentConversation::handleAmount(const bot::Update& update) {
     }
     if (!row.empty()) keyboard.inline_keyboard.push_back(row);
 
-    step = 2;
+    currentState_ = State::Currency;
     active_message_id = bot_.sendMessage(chat_id,  "Select currency:", &keyboard);
 }
 
@@ -177,9 +175,9 @@ void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    int targetStep;
+    State targetState;
     std::string data;
-    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+    if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
 
     paymentGroup.currency = data;
 
@@ -191,10 +189,10 @@ void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
     // Ask for Payer
     bot::InlineKeyboardMarkup keyboard;
     for (const auto& [uid, user] : users) {
-        keyboard.inline_keyboard.push_back({{user.name, createCallbackData(3, std::to_string(uid))}});
+        keyboard.inline_keyboard.push_back({{user.name, createCallbackData(State::Payer, std::to_string(uid))}});
     }
 
-    step = 3;
+    currentState_ = State::Payer;
     active_message_id = bot_.sendMessage(chat_id,  "Who paid?", &keyboard);
 }
 
@@ -202,9 +200,9 @@ void RecordPaymentConversation::handlePayer(const bot::Update& update) {
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    int targetStep;
+    State targetState;
     std::string data;
-    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+    if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
 
     try {
         paymentGroup.payer_user_id = std::stoll(data);
@@ -219,11 +217,11 @@ void RecordPaymentConversation::handlePayer(const bot::Update& update) {
 
     // Ask for Recipient
     bot::InlineKeyboardMarkup keyboard;
-    keyboard.inline_keyboard.push_back({{"Split Equally", createCallbackData(4, "split_equally")}});
-    keyboard.inline_keyboard.push_back({{"Split Manually", createCallbackData(4, "split_manually")}});
-    keyboard.inline_keyboard.push_back({{"Single Recipient", createCallbackData(4, "single_recipient")}});
+    keyboard.inline_keyboard.push_back({{"Split Equally", createCallbackData(State::Recipient, "split_equally")}});
+    keyboard.inline_keyboard.push_back({{"Split Manually", createCallbackData(State::Recipient, "split_manually")}});
+    keyboard.inline_keyboard.push_back({{"Single Recipient", createCallbackData(State::Recipient, "single_recipient")}});
 
-    step = 4;
+    currentState_ = State::Recipient;
     active_message_id = bot_.sendMessage(chat_id,  "Who is this for?", &keyboard);
 }
 
@@ -231,15 +229,15 @@ void RecordPaymentConversation::handleRecipient(const bot::Update& update) {
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    int targetStep;
+    State targetState;
     std::string data;
-    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+    if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
 
     if (data == "split_manually") {
         for (const auto& [uid, user] : users) {
             allocatedAmounts[uid] = 0.0;
         }
-        step = 5;
+        currentState_ = State::ManualRecipient;
         sendManualRecipients(true);
     } else if (data == "split_equally") {
         // Create payment records for each user
@@ -248,11 +246,11 @@ void RecordPaymentConversation::handleRecipient(const bot::Update& update) {
             for (const auto& [uid, user] : users) {
                 allocatedAmounts[uid] = splitAmount;
             }
-            step = 7;
+            currentState_ = State::EqualSplit;
             sendEqualSplitRecipients(true);
         }
     } else if (data == "single_recipient") {
-        step = 8;
+        currentState_ = State::SingleRecipient;
         sendSingleRecipients(true);
     }
 }
@@ -262,7 +260,7 @@ void RecordPaymentConversation::sendSingleRecipients(bool editMessage) {
 
     bot::InlineKeyboardMarkup keyboard;
     for (const auto& [uid, user] : users) {
-        keyboard.inline_keyboard.push_back({{user.name, createCallbackData(8, std::to_string(uid))}});
+        keyboard.inline_keyboard.push_back({{user.name, createCallbackData(State::SingleRecipient, std::to_string(uid))}});
     }
 
     if (editMessage) {
@@ -276,9 +274,9 @@ void RecordPaymentConversation::handleSingleRecipient(const bot::Update& update)
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    int targetStep;
+    State targetState;
     std::string data;
-    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+    if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
 
     long long recipientId;
     try {
@@ -305,10 +303,10 @@ void RecordPaymentConversation::sendEqualSplitRecipients(bool editMessage) {
 
     bot::InlineKeyboardMarkup keyboard;
     if (!allocatedAmounts.empty()) {
-        keyboard.inline_keyboard.push_back({{"Done", createCallbackData(7, "done")}});
+        keyboard.inline_keyboard.push_back({{"Done", createCallbackData(State::EqualSplit, "done")}});
     }
-    keyboard.inline_keyboard.push_back({{"Select all", createCallbackData(7, "select_all")}});
-    keyboard.inline_keyboard.push_back({{"Unselect all", createCallbackData(7, "unselect_all")}});
+    keyboard.inline_keyboard.push_back({{"Select all", createCallbackData(State::EqualSplit, "select_all")}});
+    keyboard.inline_keyboard.push_back({{"Unselect all", createCallbackData(State::EqualSplit, "unselect_all")}});
     for (const auto& [uid, user] : users) {
         std::stringstream btnText;
         if (allocatedAmounts.find(uid) != allocatedAmounts.end()) {
@@ -316,7 +314,7 @@ void RecordPaymentConversation::sendEqualSplitRecipients(bool editMessage) {
         } else {
             btnText << user.name;
         }
-        keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(7, std::to_string(uid))}});
+        keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(State::EqualSplit, std::to_string(uid))}});
     }
 
     if (editMessage) {
@@ -330,9 +328,9 @@ void RecordPaymentConversation::handleEqualSplitRecipients(const bot::Update& up
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    int targetStep;
+    State targetState;
     std::string data;
-    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+    if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
 
     if (data == "done") {
         completeConversation();
@@ -392,13 +390,13 @@ void RecordPaymentConversation::sendManualRecipients(bool editMessage) {
 
     bot::InlineKeyboardMarkup keyboard;
     if (std::abs(currentAllocated - paymentGroup.total_amount) < 0.01) {
-        keyboard.inline_keyboard.push_back({{"Done", createCallbackData(5, "done")}});
+        keyboard.inline_keyboard.push_back({{"Done", createCallbackData(State::ManualRecipient, "done")}});
     }
 
     for (const auto& [uid, user] : users) {
         std::stringstream btnText;
         btnText << user.name << " (" << std::fixed << std::setprecision(2) << allocatedAmounts[uid] << ")";
-        keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(5, std::to_string(uid))}});
+        keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(State::ManualRecipient, std::to_string(uid))}});
     }
 
     if (editMessage) {
@@ -412,9 +410,9 @@ void RecordPaymentConversation::handleManualRecipient(const bot::Update& update)
     if (update.callback_query.id.empty()) return;
     bot_.answerCallbackQuery(update.callback_query.id);
 
-    int targetStep;
+    State targetState;
     std::string data;
-    if (!parseCallbackData(update.callback_query.data, targetStep, data) || targetStep != step) return;
+    if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
 
     if (data == "done") {
         // Check if total allocated matches total amount
@@ -438,7 +436,7 @@ void RecordPaymentConversation::handleManualRecipient(const bot::Update& update)
     } catch (...) {
         // Handle error
     }
-    step = 6;
+    currentState_ = State::ManualAmount;
     bot_.editMessage(chat_id, active_message_id, "Enter amount for " + users[current_recipient_id].name + " (e.g. 123 or 123.00):");
 }
 
@@ -458,7 +456,7 @@ void RecordPaymentConversation::handleManualAmount(const bot::Update& update) {
         double roundedAmount = std::round(inputAmount * 100.0) / 100.0;
         allocatedAmounts[current_recipient_id] = roundedAmount;
 
-        step = 5;
+        currentState_ = State::ManualRecipient;
         sendManualRecipients(true);
     } catch (const std::out_of_range&) {
         bot_.editMessage(chat_id, active_message_id, "Amount is too large. Please enter a valid amount:");
