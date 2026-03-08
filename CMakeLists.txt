@@ -51,6 +51,8 @@ add_executable(friends_trip_bot
     conversations/ListPaymentsConversation.cpp
     conversations/TripsConversation.cpp
     handlers/Handlers.cpp
+    conversations/SimplifyPaymentsConversation.cpp
+    algorithm/DebtSimplifier.cpp
 )
 
 target_link_libraries(friends_trip_bot
