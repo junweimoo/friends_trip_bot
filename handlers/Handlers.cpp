@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "../conversations/ListPaymentsConversation.h"
+#include "../conversations/TripsConversation.h"
 
 namespace handlers {
 
@@ -36,6 +37,13 @@ void registerHandlers(bot::Bot& bot, const Services& services, const Repositorie
         auto convo = std::make_unique<ListPaymentsConversation>(
             msg.chat_id, 0, msg.sender_id,
             bot, repos.userRepository, repos.tripRepository, repos.paymentRepository);
+        bot.registerConversation(std::move(convo));
+    });
+
+    // trips (create, list, delete) handler
+    bot.registerCommandHandler("/trips", [&bot, &repos](const bot::Message& msg) {
+        auto convo = std::make_unique<TripsConversation>(
+            msg.chat_id, msg.sender_id, bot, repos.tripRepository);
         bot.registerConversation(std::move(convo));
     });
 }

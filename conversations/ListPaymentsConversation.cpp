@@ -96,7 +96,7 @@ void ListPaymentsConversation::sendCurrentPage(bool editMessage) {
     }
     ss << "\n";
 
-    ss << "<b>Payment List (Page " << currentPage << "/" << totalPages << ")</b>\n\n";
+    ss << "<b>Payment List (Page " << currentPage << "/" << totalPages << ")</b>\n";
 
     int startIdx = (currentPage - 1) * pageSize;
     int endIdx = std::min(startIdx + pageSize, static_cast<int>(paymentGroups.size()));
