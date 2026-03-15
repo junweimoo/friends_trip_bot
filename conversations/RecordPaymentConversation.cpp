@@ -1,9 +1,12 @@
 #include "RecordPaymentConversation.h"
 #include "../bot/Bot.h"
+#include "../utils/MoneyAmount.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <cmath>
+#include <random>
+#include <algorithm>
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
 
@@ -135,7 +138,7 @@ void RecordPaymentConversation::handleAmount(const bot::Update& update) {
             bot_.editMessage(chat_id, active_message_id, "Amount is too large. Please enter a valid amount:");
             return;
         }
-        paymentGroup.total_amount = std::round(inputAmount * 100.0) / 100.0;
+        pendingRawAmount_ = inputAmount;
     } catch (const std::out_of_range&) {
         bot_.editMessage(chat_id, active_message_id, "Amount is too large. Please enter a valid amount:");
         return;
@@ -144,9 +147,9 @@ void RecordPaymentConversation::handleAmount(const bot::Update& update) {
         return;
     }
 
-    // Update original message
+    // Update original message (currency not yet known, display raw number)
     std::stringstream editedMsg;
-    editedMsg << "✅ Amount: " << std::fixed << std::setprecision(2) << paymentGroup.total_amount;
+    editedMsg << "✅ Amount: " << std::fixed << std::setprecision(2) << pendingRawAmount_;
     bot_.editMessage(chat_id, active_message_id, editedMsg.str());
 
     // Ask for currency
@@ -179,11 +182,11 @@ void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
     std::string data;
     if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
 
-    paymentGroup.currency = data;
+    paymentGroup.total_amount = MoneyAmount::fromMajorUnits(data, pendingRawAmount_);
 
     // Update original message
     std::stringstream editedMsg;
-    editedMsg << "✅ Currency: " << paymentGroup.currency;
+    editedMsg << "✅ Currency: " << paymentGroup.total_amount.currency();
     bot_.editMessage(chat_id, active_message_id, editedMsg.str());
 
     // Ask for Payer
@@ -235,17 +238,17 @@ void RecordPaymentConversation::handleRecipient(const bot::Update& update) {
 
     if (data == "split_manually") {
         for (const auto& [uid, user] : users) {
-            allocatedAmounts[uid] = 0.0;
+            allocatedAmounts[uid] = 0;
         }
         currentState_ = State::ManualRecipient;
         sendManualRecipients(true);
     } else if (data == "split_equally") {
         // Create payment records for each user
         if (!users.empty()) {
-            double splitAmount = std::round((paymentGroup.total_amount / users.size()) * 100.0) / 100.0;
             for (const auto& [uid, user] : users) {
-                allocatedAmounts[uid] = splitAmount;
+                allocatedAmounts[uid] = 0;
             }
+            distributeEqually();
             currentState_ = State::EqualSplit;
             sendEqualSplitRecipients(true);
         }
@@ -284,18 +287,76 @@ void RecordPaymentConversation::handleSingleRecipient(const bot::Update& update)
     } catch (...) {
         return;
     }
-    allocatedAmounts[recipientId] = paymentGroup.total_amount;
+    allocatedAmounts[recipientId] = paymentGroup.total_amount.minorAmount();
     completeConversation();
 }
 
+void RecordPaymentConversation::distributeEqually() {
+    if (allocatedAmounts.empty()) return;
+    long long total = paymentGroup.total_amount.minorAmount();
+    auto n = static_cast<long long>(allocatedAmounts.size());
+    long long base = total / n;
+    long long remainder = total - base * n;
+
+    // Collect keys and shuffle to randomize who gets the extra unit
+    std::vector<long long> uids;
+    uids.reserve(allocatedAmounts.size());
+    for (const auto& [uid, amount] : allocatedAmounts) {
+        uids.push_back(uid);
+    }
+
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::shuffle(uids.begin(), uids.end(), rng);
+
+    for (long long i = 0; i < n; ++i) {
+        allocatedAmounts[uids[i]] = (i < remainder) ? base + 1 : base;
+    }
+}
+
 void RecordPaymentConversation::sendEqualSplitRecipients(bool editMessage) {
-    double splitAmount;
     std::string text;
     if (!allocatedAmounts.empty()) {
-        splitAmount = std::round((paymentGroup.total_amount / allocatedAmounts.size()) * 100.0) / 100.0;
+        long long total = paymentGroup.total_amount.minorAmount();
+        auto n = static_cast<long long>(allocatedAmounts.size());
+        long long base = total / n;
+        long long remainder = total - base * n;
+        const std::string& currency = paymentGroup.total_amount.currency();
         std::stringstream ss;
-        ss << "Split equally between " << allocatedAmounts.size() << " users (" << std::fixed << std::setprecision(2)
-           << splitAmount << " each)";
+        ss << "Split equally between " << n << " users";
+        if (remainder > 0) {
+            MoneyAmount extraAmount(currency, base + 1);
+            MoneyAmount baseAmount(currency, base);
+
+            // Group users by whether they got the extra unit
+            std::vector<std::string> extraNames, baseNames;
+            for (const auto& [uid, amount] : allocatedAmounts) {
+                if (amount == base + 1) {
+                    extraNames.push_back(users[uid].name);
+                } else {
+                    baseNames.push_back(users[uid].name);
+                }
+            }
+
+            ss << "\n";
+            for (size_t j = 0; j < extraNames.size(); ++j) {
+                if (j > 0) ss << ", ";
+                ss << extraNames[j];
+            }
+            ss << (extraNames.size() == 1 ? " gets " : " get ") << extraAmount.toHumanReadable();
+
+            if (!baseNames.empty()) {
+                ss << "\n";
+                for (size_t j = 0; j < baseNames.size(); ++j) {
+                    if (j > 0) ss << ", ";
+                    ss << baseNames[j];
+                }
+                ss << (baseNames.size() == 1 ? " gets " : " get ") << baseAmount.toHumanReadable();
+            }
+        } else {
+            MoneyAmount baseAmount(currency, base);
+            ss << " (" << baseAmount.toHumanReadable() << " each)";
+        }
         text = ss.str();
     } else {
         text = "No users selected";
@@ -337,17 +398,20 @@ void RecordPaymentConversation::handleEqualSplitRecipients(const bot::Update& up
         return;
     }
 
+    if (data == "randomize") {
+        distributeEqually();
+        sendEqualSplitRecipients(true);
+        return;
+    }
+
     if (data == "select_all") {
-        // Add all recipients to allocatedAmounts
         if (!users.empty()) {
-            double splitAmount = std::round((paymentGroup.total_amount / users.size()) * 100.0) / 100.0;
-            double roundedTotalAmount = splitAmount * users.size();
             for (const auto& [uid, user] : users) {
-                allocatedAmounts[uid] = splitAmount;
+                allocatedAmounts[uid] = 0;
             }
+            distributeEqually();
         }
     } else if (data == "unselect_all") {
-        // Clear all recipients from allocatedAmounts
         allocatedAmounts.clear();
     } else {
         long long recipientId;
@@ -357,45 +421,38 @@ void RecordPaymentConversation::handleEqualSplitRecipients(const bot::Update& up
             return;
         }
         if (allocatedAmounts.find(recipientId) != allocatedAmounts.end()) {
-            // Remove recipient from allocatedAmounts
             allocatedAmounts.erase(recipientId);
-            if (!allocatedAmounts.empty()) {
-                double splitAmount = std::round((paymentGroup.total_amount / allocatedAmounts.size()) * 100.0) / 100.0;
-                for (auto& [uid, amount] : allocatedAmounts) {
-                    amount = splitAmount;
-                }
-            }
         } else {
-            // Add recipient to allocatedAmounts
-            double splitAmount = std::round((paymentGroup.total_amount / (allocatedAmounts.size() + 1)) * 100.0) / 100.0;
-            allocatedAmounts[recipientId] = splitAmount;
-            for (auto& [uid, amount] : allocatedAmounts) {
-                amount = splitAmount;
-            }
+            allocatedAmounts[recipientId] = 0;
         }
+        distributeEqually();
     }
     sendEqualSplitRecipients(true);
 }
 
 void RecordPaymentConversation::sendManualRecipients(bool editMessage) {
-    double currentAllocated = 0;
+    long long currentAllocated = 0;
     for (const auto& [uid, amount] : allocatedAmounts) {
         currentAllocated += amount;
     }
 
+    const std::string& currency = paymentGroup.total_amount.currency();
+    MoneyAmount allocated(currency, currentAllocated);
+    MoneyAmount remaining(currency, paymentGroup.total_amount.minorAmount() - currentAllocated);
+
     std::stringstream ss;
-    ss << "Allocated " << std::fixed << std::setprecision(2) << currentAllocated << "/" << paymentGroup.total_amount
-       << " (" << std::fixed << std::setprecision(2) << (paymentGroup.total_amount - currentAllocated) << " remaining)";
+    ss << "Allocated " << allocated.toHumanReadable() << "/" << paymentGroup.total_amount.toHumanReadable()
+       << " (" << remaining.toHumanReadable() << " remaining)";
     std::string text = ss.str();
 
     bot::InlineKeyboardMarkup keyboard;
-    if (std::abs(currentAllocated - paymentGroup.total_amount) < 0.01) {
+    if (currentAllocated == paymentGroup.total_amount.minorAmount()) {
         keyboard.inline_keyboard.push_back({{"Done", createCallbackData(State::ManualRecipient, "done")}});
     }
 
     for (const auto& [uid, user] : users) {
         std::stringstream btnText;
-        btnText << user.name << " (" << std::fixed << std::setprecision(2) << allocatedAmounts[uid] << ")";
+        btnText << user.name << " (" << MoneyAmount(currency, allocatedAmounts[uid]).toHumanReadable() << ")";
         keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(State::ManualRecipient, std::to_string(uid))}});
     }
 
@@ -416,12 +473,12 @@ void RecordPaymentConversation::handleManualRecipient(const bot::Update& update)
 
     if (data == "done") {
         // Check if total allocated matches total amount
-        double currentAllocated = 0;
+        long long currentAllocated = 0;
         for (const auto& [uid, amount] : allocatedAmounts) {
             currentAllocated += amount;
         }
 
-        if (std::abs(currentAllocated - paymentGroup.total_amount) > 0.01) {
+        if (currentAllocated != paymentGroup.total_amount.minorAmount()) {
             bot_.sendMessage(chat_id, "Allocated amount does not match total amount. Please adjust.");
             sendManualRecipients(true);
             return;
@@ -453,8 +510,8 @@ void RecordPaymentConversation::handleManualAmount(const bot::Update& update) {
             bot_.editMessage(chat_id, active_message_id, "Amount is too large. Please enter a valid amount:");
             return;
         }
-        double roundedAmount = std::round(inputAmount * 100.0) / 100.0;
-        allocatedAmounts[current_recipient_id] = roundedAmount;
+        long long minorAmount = MoneyAmount::fromMajorUnits(paymentGroup.total_amount.currency(), inputAmount).minorAmount();
+        allocatedAmounts[current_recipient_id] = minorAmount;
 
         currentState_ = State::ManualRecipient;
         sendManualRecipients(true);
@@ -469,11 +526,15 @@ void RecordPaymentConversation::completeConversation() {
     paymentGroup.records.clear();
 
     std::chrono::system_clock::time_point current_time{};
+    const std::string& currency = paymentGroup.total_amount.currency();
+
     // Create records from allocatedAmounts
     for (const auto& [uid, amount] : allocatedAmounts) {
         if (amount > 0) {
             paymentGroup.records.push_back({
-                0, 0, paymentGroup.trip_id, amount, paymentGroup.currency, paymentGroup.payer_user_id, uid, current_time
+                0, 0, paymentGroup.trip_id,
+                MoneyAmount(currency, amount),
+                paymentGroup.payer_user_id, uid, current_time
             });
         }
     }
@@ -481,15 +542,14 @@ void RecordPaymentConversation::completeConversation() {
     std::stringstream overviewMsg;
     overviewMsg << "<b>👍 Payment recorded!</b>\n";
     overviewMsg << "<b>Name:</b> " << paymentGroup.name << "\n";
-    overviewMsg << "<b>Amount:</b> " << std::fixed << std::setprecision(2) << paymentGroup.total_amount << " " << paymentGroup.currency << "\n";
+    overviewMsg << "<b>Amount:</b> " << paymentGroup.total_amount.toHumanReadable() << "\n";
     overviewMsg << "<b>Payer:</b> " << users[paymentGroup.payer_user_id].name << "\n";
     overviewMsg << "<b>Recipients:</b>\n";
 
     for (const auto& [uid, amount] : allocatedAmounts) {
         if (amount > 0) {
             overviewMsg << "- " << users[uid].name << " ("
-                        << std::fixed << std::setprecision(2) << amount << " "
-                        << paymentGroup.currency << ")\n";
+                        << MoneyAmount(currency, amount).toHumanReadable() << ")\n";
         }
     }
 

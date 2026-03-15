@@ -50,7 +50,7 @@ void TripsConversation::sendTripList(bool edit) {
     if (allTrips_.size() >= 2) {
         keyboard.inline_keyboard.push_back({{"🗑️ Delete current trip", "delete_trip"}});
     }
-    keyboard.inline_keyboard.push_back({{"Cancel", "close"}});
+    keyboard.inline_keyboard.push_back({{"Close", "close"}});
 
     if (edit) {
         bot_.editMessage(chat_id, message_id_, ss.str(), &keyboard);

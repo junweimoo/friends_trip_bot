@@ -31,7 +31,7 @@ private:
     Trip trip;
     std::vector<PaymentGroup> paymentGroups;
     std::unordered_map<long long, User> users;
-    std::unordered_map<long long, std::unordered_map<std::string, double>> netBalances;
+    std::unordered_map<long long, std::unordered_map<std::string, long long>> netBalances;
 
     UserRepository& userRepo_;
     TripRepository& tripRepo_;

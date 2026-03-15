@@ -18,7 +18,7 @@ bool PaymentRepository::createPaymentGroup(const PaymentGroup& group) {
         // 1. Create the Payment Group
         pqxx::result groupRes = txn.exec_params(
             "INSERT INTO payment_groups (trip_id, name, total_amount, currency, payer_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING group_id",
-            group.trip_id, group.name, group.total_amount, group.currency, group.payer_user_id
+            group.trip_id, group.name, group.total_amount.minorAmount(), group.total_amount.currency(), group.payer_user_id
         );
 
         if (groupRes.empty()) return false;
@@ -28,7 +28,7 @@ bool PaymentRepository::createPaymentGroup(const PaymentGroup& group) {
         for (const auto& rec : group.records) {
             txn.exec_params(
                 "INSERT INTO payment_records (group_id, trip_id, amount, currency, from_user_id, to_user_id) VALUES ($1, $2, $3, $4, $5, $6)",
-                groupId, group.trip_id, rec.amount, rec.currency, rec.from_user_id, rec.to_user_id
+                groupId, group.trip_id, rec.amount.minorAmount(), rec.amount.currency(), rec.from_user_id, rec.to_user_id
             );
         }
 
@@ -89,8 +89,7 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
                 gId,
                 row["trip_id"].as<long long>(),
                 row["name"].c_str(),
-                row["total_amount"].as<double>(),
-                row["currency"].c_str(),
+                MoneyAmount(row["currency"].c_str(), row["total_amount"].as<long long>()),
                 row["payer_user_id"].as<long long>(),
                 utils::parseTimestamp(row["gmt_created"].c_str()),
                 {}
@@ -128,8 +127,7 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
                     row["record_id"].as<long long>(),
                     gId,
                     row["trip_id"].as<long long>(),
-                    row["amount"].as<double>(),
-                    row["currency"].c_str(),
+                    MoneyAmount(row["currency"].c_str(), row["amount"].as<long long>()),
                     row["from_user_id"].as<long long>(),
                     row["to_user_id"].as<long long>(),
                     utils::parseTimestamp(row["gmt_created"].c_str())
@@ -165,8 +163,7 @@ std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripI
                 gId,
                 row["trip_id"].as<long long>(),
                 row["name"].c_str(),
-                row["total_amount"].as<double>(),
-                row["currency"].c_str(),
+                MoneyAmount(row["currency"].c_str(), row["total_amount"].as<long long>()),
                 row["payer_user_id"].as<long long>(),
                 utils::parseTimestamp(row["gmt_created"].c_str()),
                 {}
@@ -197,8 +194,7 @@ std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripI
                     row["record_id"].as<long long>(),
                     gId,
                     row["trip_id"].as<long long>(),
-                    row["amount"].as<double>(),
-                    row["currency"].c_str(),
+                    MoneyAmount(row["currency"].c_str(), row["amount"].as<long long>()),
                     row["from_user_id"].as<long long>(),
                     row["to_user_id"].as<long long>(),
                     utils::parseTimestamp(row["gmt_created"].c_str())
@@ -232,8 +228,7 @@ std::vector<PaymentRecord> PaymentRepository::getAllPaymentRecords(long long tri
                 row["record_id"].as<long long>(),
                 row["group_id"].as<long long>(),
                 row["trip_id"].as<long long>(),
-                row["amount"].as<double>(),
-                row["currency"].c_str(),
+                MoneyAmount(row["currency"].c_str(), row["amount"].as<long long>()),
                 row["from_user_id"].as<long long>(),
                 row["to_user_id"].as<long long>(),
                 utils::parseTimestamp(row["gmt_created"].c_str())

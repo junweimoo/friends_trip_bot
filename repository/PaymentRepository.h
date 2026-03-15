@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include "../utils/MoneyAmount.h"
 
 class DatabaseManager;
 
@@ -11,8 +12,7 @@ struct PaymentRecord {
     long long payment_record_id;
     long long payment_group_id;
     long long trip_id;
-    double amount;
-    std::string currency;
+    MoneyAmount amount;    // stored as minor units (cents for USD, 1 yen for JPY, etc.)
     long long from_user_id;
     long long to_user_id;
     std::chrono::system_clock::time_point gmt_created;
@@ -22,8 +22,7 @@ struct PaymentGroup {
     long long payment_group_id;
     long long trip_id;
     std::string name;
-    double total_amount;
-    std::string currency;
+    MoneyAmount total_amount;  // stored as minor units; currency is embedded in MoneyAmount
     long long payer_user_id;
     std::chrono::system_clock::time_point gmt_created;
     std::vector<PaymentRecord> records;

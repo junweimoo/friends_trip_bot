@@ -56,7 +56,7 @@ void createTables(DatabaseManager& dbManager) {
                 group_id BIGSERIAL PRIMARY KEY,
                 trip_id BIGINT NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
                 name VARCHAR(255),
-                total_amount NUMERIC(15, 2),
+                total_amount BIGINT,
                 currency VARCHAR(3),
                 payer_user_id BIGINT,
                 gmt_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -70,7 +70,7 @@ void createTables(DatabaseManager& dbManager) {
                 record_id BIGSERIAL PRIMARY KEY,
                 group_id BIGINT NOT NULL REFERENCES payment_groups(group_id) ON DELETE CASCADE,
                 trip_id BIGINT NOT NULL, 
-                amount NUMERIC(15, 2),
+                amount BIGINT,
                 currency VARCHAR(3),
                 from_user_id BIGINT,
                 to_user_id BIGINT,

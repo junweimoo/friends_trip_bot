@@ -1,6 +1,7 @@
 #include "ListPaymentsConversation.h"
 #include "../bot/Bot.h"
 #include "../utils/utils.h"
+#include "../utils/MoneyAmount.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -68,11 +69,11 @@ void ListPaymentsConversation::computeNetBalances() {
     netBalances.clear();
     for (const auto& group : paymentGroups) {
         // Payer paid total_amount
-        netBalances[group.payer_user_id][group.currency] += group.total_amount;
+        netBalances[group.payer_user_id][group.total_amount.currency()] += group.total_amount.minorAmount();
 
         // Each record recipient "received" (owes) amount
         for (const auto& record : group.records) {
-            netBalances[record.to_user_id][group.currency] -= record.amount;
+            netBalances[record.to_user_id][record.amount.currency()] -= record.amount.minorAmount();
         }
     }
 }
@@ -90,7 +91,7 @@ void ListPaymentsConversation::sendCurrentPage(bool editMessage) {
             ss << "👤 <b>" << users[userId].name << ":</b>\n";
             for (const auto& [currency, amount] : balances) {
                 std::string color = (amount >= 0) ? "🟢" : "🔴";
-                ss << "  " << color << " " << std::fixed << std::setprecision(2) << amount << " " << currency << "\n";
+                ss << "  " << color << " " << MoneyAmount(currency, amount).toHumanReadable() << "\n";
             }
         }
     }
@@ -108,10 +109,10 @@ void ListPaymentsConversation::sendCurrentPage(bool editMessage) {
             const auto& group = paymentGroups[i];
 
             ss << "📂 " << i + 1 << ". <b>" << group.name << "</b> (" << utils::formatTimestamp(group.gmt_created, 8) << ")\n";
-            ss << "<b>" << std::fixed << std::setprecision(2) << group.total_amount << " " << group.currency << "</b> paid by <b>" << users[group.payer_user_id].name << "</b>\n";
+            ss << "<b>" << group.total_amount.toHumanReadable() << "</b> paid by <b>" << users[group.payer_user_id].name << "</b>\n";
 
             for (const auto& record : group.records) {
-                ss << "- " << users[record.to_user_id].name << " received " << std::fixed << std::setprecision(2) << record.amount << " " << record.currency << "\n";
+                ss << "- " << users[record.to_user_id].name << " received " << record.amount.toHumanReadable() << "\n";
             }
             ss << "\n";
         }

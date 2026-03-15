@@ -44,6 +44,7 @@ private:
     void sendManualRecipients(bool editMessage);
     void completeConversation();
     void cancelConversation();
+    void distributeEqually();
 
     std::string createCallbackData(State targetState, const std::string& data);
     bool parseCallbackData(const std::string& jsonStr, State& targetState, std::string& data);
@@ -57,7 +58,9 @@ private:
     std::unordered_map<long long, User> users;
     Trip trip;
 
-    std::unordered_map<long long, double> allocatedAmounts;
+    // Allocated amounts stored as minor units (same currency as paymentGroup.total_amount)
+    std::unordered_map<long long, long long> allocatedAmounts;
+    double pendingRawAmount_ = 0.0;
     long long current_recipient_id;
 
     PaymentGroup paymentGroup;

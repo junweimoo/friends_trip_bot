@@ -102,8 +102,8 @@ void SimplifyPaymentsConversation::handleCurrencySelection(const bot::Update& up
     // Collect distinct foreign currencies from all payment groups
     std::set<std::string> seen;
     for (const auto& group : paymentGroups_) {
-        if (group.currency != targetCurrency_) {
-            seen.insert(group.currency);
+        if (group.total_amount.currency() != targetCurrency_) {
+            seen.insert(group.total_amount.currency());
         }
     }
     foreignCurrencies_.assign(seen.begin(), seen.end());
@@ -149,7 +149,7 @@ void SimplifyPaymentsConversation::handleExchangeRateInput(const bot::Update& up
 
     // Edit the prompt message to show confirmed rate
     std::stringstream confirmed;
-    confirmed << "✅ 1 " << foreign << " = " << std::fixed << std::setprecision(4) << rate << " " << targetCurrency_;
+    confirmed << "✅ 1 " << foreign << " = " << std::fixed << std::setprecision(5) << rate << " " << targetCurrency_;
     if (active_message_id_ != 0) {
         bot_.editMessage(chat_id, active_message_id_, confirmed.str());
     }
@@ -164,7 +164,7 @@ void SimplifyPaymentsConversation::handleExchangeRateInput(const bot::Update& up
 }
 
 void SimplifyPaymentsConversation::computeAndDisplayResults() {
-    auto simplifiedPayments = DebtSimplifier::simplifyDebts(paymentGroups_, exchangeRates_);
+    auto simplifiedPayments = DebtSimplifier::simplifyDebts(paymentGroups_, exchangeRates_, targetCurrency_);
 
     std::stringstream ss;
     ss << "<b>Simplified Payments (" << targetCurrency_ << ")</b>\n";
@@ -176,8 +176,7 @@ void SimplifyPaymentsConversation::computeAndDisplayResults() {
         for (const auto& payment : simplifiedPayments) {
             ss << users_[payment.from_user_id].name << " pays "
                << users_[payment.to_user_id].name << " "
-               << std::fixed << std::setprecision(2) << payment.amount
-               << " " << targetCurrency_ << "\n";
+               << payment.amount.toHumanReadable() << "\n";
         }
     }
 

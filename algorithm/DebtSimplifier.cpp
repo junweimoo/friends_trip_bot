@@ -4,26 +4,29 @@
 
 std::vector<SimplifiedPayment> DebtSimplifier::simplifyDebts(
     const std::vector<PaymentGroup>& paymentGroups,
-    const std::unordered_map<std::string, double>& exchangeRates) {
+    const std::unordered_map<std::string, double>& exchangeRates,
+    const std::string& targetCurrency) {
+    double targetMinorPerMajor = MoneyAmount::minorUnitsPerMajor(targetCurrency);
 
-    // Compute net balance per user in target currency
     std::unordered_map<long long, double> balances;
     for (const auto& group : paymentGroups) {
-        double rate = exchangeRates.at(group.currency);
-        balances[group.payer_user_id] += group.total_amount * rate;
         for (const auto& record : group.records) {
-            balances[record.to_user_id] -= record.amount * rate;
+            double srcMinorPerMajor = MoneyAmount::minorUnitsPerMajor(record.amount.currency());
+            double recConversionFactor = exchangeRates.at(record.amount.currency()) * targetMinorPerMajor / srcMinorPerMajor;
+
+            double transactionAmountMinor = record.amount.minorAmount() * recConversionFactor;
+            balances[record.to_user_id] -= transactionAmountMinor;
+            balances[record.from_user_id] += transactionAmountMinor;
         }
     }
 
-    // Separate into creditors and debtors
     std::vector<std::pair<long long, double>> creditors;
     std::vector<std::pair<long long, double>> debtors;
 
     for (const auto& [userId, balance] : balances) {
-        if (balance > 0.01) {
+        if (balance > 0.5) {
             creditors.push_back({userId, balance});
-        } else if (balance < -0.01) {
+        } else if (balance < -0.5) {
             debtors.push_back({userId, -balance});
         }
     }
@@ -42,17 +45,19 @@ std::vector<SimplifiedPayment> DebtSimplifier::simplifyDebts(
 
     while (!creditors.empty() && !debtors.empty()) {
         double settleAmount = std::min(creditors[0].second, debtors[0].second);
-        settleAmount = std::round(settleAmount * 100.0) / 100.0;
-
-        result.push_back({debtors[0].first, creditors[0].first, settleAmount});
-
         creditors[0].second -= settleAmount;
         debtors[0].second -= settleAmount;
 
-        if (creditors[0].second < 0.01) {
+        long long settleMinor = static_cast<long long>(std::round(settleAmount));
+        if (settleMinor > 0) {
+            result.push_back({debtors[0].first, creditors[0].first,
+                              MoneyAmount(targetCurrency, settleMinor)});
+        }
+
+        if (creditors[0].second < 0.5) {
             creditors.erase(creditors.begin());
         }
-        if (debtors[0].second < 0.01) {
+        if (!debtors.empty() && debtors[0].second < 0.5) {
             debtors.erase(debtors.begin());
         }
 
