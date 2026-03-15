@@ -34,7 +34,14 @@ set(SKIP_PQXX_STATIC ON CACHE BOOL "" FORCE)
 set(SKIP_PQXX_DYNAMIC OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(libpqxx)
 
-#F
+# Fetch parallel-hashmap (header-only concurrent hashmap)
+FetchContent_Declare(
+    parallel-hashmap
+    URL https://github.com/greg7mdp/parallel-hashmap/archive/refs/tags/v1.4.0.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(parallel-hashmap)
+
 find_package(CURL REQUIRED)
 
 add_executable(friends_trip_bot
@@ -62,4 +69,5 @@ target_link_libraries(friends_trip_bot
     pqxx
     PostgreSQL::PostgreSQL
     spdlog::spdlog
+    phmap
 )

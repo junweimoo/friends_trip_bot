@@ -8,8 +8,9 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
-#include <shared_mutex>
 #include <utility>
+
+#include <parallel_hashmap/phmap.h>
 
 #include "Conversation.h"
 #include "InternalTypes.h"
@@ -65,9 +66,20 @@ private:
         std::unique_ptr<Conversation> conversation;
     };
 
+    struct PairHash {
+        size_t operator()(const std::pair<long long, long long>& p) const {
+            size_t h1 = phmap::Hash<long long>{}(p.first);
+            size_t h2 = phmap::Hash<long long>{}(p.second);
+            return phmap::HashState::combine(0, h1, h2);
+        }
+    };
+
     // Key: {chat_id, user_id}
-    std::map<std::pair<long long, long long>, std::shared_ptr<ConversationEntry>> conversations;
-    std::shared_mutex conversationsMutex;
+    phmap::parallel_flat_hash_map<
+        std::pair<long long, long long>,
+        std::shared_ptr<ConversationEntry>,
+        PairHash
+    > conversations;
 
     void poll();
     std::vector<Update> getUpdates();

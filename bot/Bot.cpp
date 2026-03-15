@@ -54,11 +54,7 @@ void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
     auto entry = std::make_shared<ConversationEntry>();
     entry->conversation = std::move(conversation);
 
-    {
-        // Use unique_lock here so that only one thread can write to conversations at a time
-        std::unique_lock<std::shared_mutex> lock(conversationsMutex);
-        conversations[{chatId, userId}] = entry;
-    }
+    conversations.insert_or_assign({chatId, userId}, entry);
 }
 
 long long Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard, const std::string& parseMode) {
@@ -281,39 +277,30 @@ void Bot::poll() {
         // Handle Conversations
         bool isConversation = false;
         if (!isCommand && chatId != 0 && userId != 0) {
-            std::shared_ptr<ConversationEntry> entry = nullptr;
-            {
-                // Use shared_lock here since this is a read-only operation
-                std::shared_lock<std::shared_mutex> lock(conversationsMutex);
-                auto it = conversations.find({chatId, userId});
-                if (it != conversations.end()) {
-                    entry = it->second;
-                }
-            }
+            std::shared_ptr<ConversationEntry> entry;
+            auto key = std::make_pair(chatId, userId);
+            conversations.if_contains(key, [&entry](const auto& kv) {
+                entry = kv.second;
+            });
 
             if (entry) {
-                std::thread([this, update, chatId, userId, entry]() {
+                std::thread([this, update, key, entry]() {
                     bool closedNow = false;
                     {
                         // Use fine-grained lock specific to this conversation entry
                         std::lock_guard<std::mutex> lock(entry->mutex);
                         if (!entry->conversation->isClosed()) {
-                            // Dispatch conversation
                             entry->conversation->handleUpdate(update);
                             closedNow = entry->conversation->isClosed();
                         } else {
-                            // Already closed by another thread, do nothing
                             closedNow = true;
                         }
                     }
 
                     if (closedNow) {
-                        // Use unique_lock here so that only one thread can erase from conversations at a time
-                        std::unique_lock<std::shared_mutex> mapLock(conversationsMutex);
-                        auto it = conversations.find({chatId, userId});
-                        if (it != conversations.end() && it->second == entry) {
-                            conversations.erase(it);
-                        }
+                        conversations.erase_if(key, [&entry](auto& kv) {
+                            return kv.second == entry;
+                        });
                     }
                 }).detach();
                 isConversation = true;
