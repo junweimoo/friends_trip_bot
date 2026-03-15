@@ -1,6 +1,8 @@
 #include "SimplifyPaymentsConversation.h"
 #include "../algorithm/GreedyDebtSimplifier.h"
+#include "../algorithm/MinTransactionsSimplifier.h"
 #include "../bot/Bot.h"
+#include <memory>
 #include <sstream>
 #include <iomanip>
 #include <cmath>
@@ -11,7 +13,6 @@ SimplifyPaymentsConversation::SimplifyPaymentsConversation(long long chat_id, lo
     bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo)
     : Conversation(chat_id, thread_id, user_id, bot),
       currentState_(State::SelectingCurrency), closed_(false), active_message_id_(0),
-      simplifier_(std::make_unique<GreedyDebtSimplifier>()),
       userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo), currentForeignCurrencyIndex_(0) {
 
     auto activeTrip = tripRepo_.getActiveTrip(chat_id, thread_id);
@@ -166,7 +167,23 @@ void SimplifyPaymentsConversation::handleExchangeRateInput(const bot::Update& up
 }
 
 void SimplifyPaymentsConversation::computeAndDisplayResults() {
-    auto simplifiedPayments = simplifier_->simplifyDebts(paymentGroups_, exchangeRates_, targetCurrency_);
+    std::set<long long> participants;
+    for (const auto& group : paymentGroups_) {
+        for (const auto& record : group.records) {
+            participants.insert(record.from_user_id);
+            participants.insert(record.to_user_id);
+        }
+    }
+
+    static constexpr size_t MIN_TRANSACTIONS_THRESHOLD = 15;
+    std::unique_ptr<DebtSimplifier> simplifier;
+    if (participants.size() <= MIN_TRANSACTIONS_THRESHOLD) {
+        simplifier = std::make_unique<MinTransactionsSimplifier>();
+    } else {
+        simplifier = std::make_unique<GreedyDebtSimplifier>();
+    }
+
+    auto simplifiedPayments = simplifier->simplifyDebts(paymentGroups_, exchangeRates_, targetCurrency_);
 
     std::stringstream ss;
     ss << "<b>Simplified Payments (" << targetCurrency_ << ")</b>\n";
