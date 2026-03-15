@@ -60,6 +60,8 @@ add_executable(friends_trip_bot
     handlers/Handlers.cpp
     conversations/SimplifyPaymentsConversation.cpp
     algorithm/DebtSimplifier.cpp
+    algorithm/GreedyDebtSimplifier.cpp
+    algorithm/MinTransactionsSimplifier.cpp
 )
 
 target_link_libraries(friends_trip_bot

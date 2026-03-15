@@ -2,10 +2,12 @@
 #define FRIENDS_TRIP_BOT_SIMPLIFYPAYMENTSCONVERSATION_H
 
 #include "../algorithm/DebtSimplifier.h"
+#include "../algorithm/GreedyDebtSimplifier.h"
 #include "../bot/Conversation.h"
 #include "../repository/PaymentRepository.h"
 #include "../repository/TripRepository.h"
 #include "../repository/UserRepository.h"
+#include <memory>
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -39,6 +41,8 @@ private:
     Trip trip_;
     std::vector<PaymentGroup> paymentGroups_;
     std::unordered_map<long long, User> users_;
+
+    std::unique_ptr<DebtSimplifier> simplifier_;
 
     UserRepository& userRepo_;
     TripRepository& tripRepo_;
