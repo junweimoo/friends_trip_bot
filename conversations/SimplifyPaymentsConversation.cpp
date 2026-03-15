@@ -149,7 +149,7 @@ void SimplifyPaymentsConversation::handleExchangeRateInput(const bot::Update& up
 
     // Edit the prompt message to show confirmed rate
     std::stringstream confirmed;
-    confirmed << "✅ 1 " << foreign << " = " << std::fixed << std::setprecision(5) << rate << " " << targetCurrency_;
+    confirmed << "✅ 1 " << foreign << " = " << std::fixed << rate << " " << targetCurrency_;
     if (active_message_id_ != 0) {
         bot_.editMessage(chat_id, active_message_id_, confirmed.str());
     }

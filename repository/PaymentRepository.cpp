@@ -10,15 +10,18 @@ PaymentRepository::PaymentRepository(DatabaseManager& dbManager) : dbManager_(db
 
 bool PaymentRepository::createPaymentGroup(const PaymentGroup& group) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return false;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error creating payment group: database connection unavailable" << std::endl;
+        return false;
+    }
 
     try {
         pqxx::work txn(*conn);
 
         // 1. Create the Payment Group
-        pqxx::result groupRes = txn.exec_params(
+        pqxx::result groupRes = txn.exec(
             "INSERT INTO payment_groups (trip_id, name, total_amount, currency, payer_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING group_id",
-            group.trip_id, group.name, group.total_amount.minorAmount(), group.total_amount.currency(), group.payer_user_id
+            pqxx::params{group.trip_id, group.name, group.total_amount.minorAmount(), group.total_amount.currency(), group.payer_user_id}
         );
 
         if (groupRes.empty()) return false;
@@ -26,9 +29,9 @@ bool PaymentRepository::createPaymentGroup(const PaymentGroup& group) {
 
         // 2. Create the Payment Records linked to the new group
         for (const auto& rec : group.records) {
-            txn.exec_params(
+            txn.exec(
                 "INSERT INTO payment_records (group_id, trip_id, amount, currency, from_user_id, to_user_id) VALUES ($1, $2, $3, $4, $5, $6)",
-                groupId, group.trip_id, rec.amount.minorAmount(), rec.amount.currency(), rec.from_user_id, rec.to_user_id
+                pqxx::params{groupId, group.trip_id, rec.amount.minorAmount(), rec.amount.currency(), rec.from_user_id, rec.to_user_id}
             );
         }
 
@@ -42,13 +45,16 @@ bool PaymentRepository::createPaymentGroup(const PaymentGroup& group) {
 
 int PaymentRepository::getPaymentRecordCount(long long tripId) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return 0;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error getting payment record count: database connection unavailable" << std::endl;
+        return 0;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "SELECT COUNT(*) FROM payment_records WHERE trip_id = $1",
-            tripId
+            pqxx::params{tripId}
         );
 
         if (res.empty()) return 0;
@@ -63,7 +69,10 @@ int PaymentRepository::getPaymentRecordCount(long long tripId) {
 std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, int pageSize, int pageNumber) {
     std::vector<PaymentGroup> groups;
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return groups;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error getting payment groups: database connection unavailable" << std::endl;
+        return groups;
+    }
 
     if (pageSize <= 0) return groups;
     if (pageNumber < 1) pageNumber = 1;
@@ -73,12 +82,12 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
     try {
         pqxx::work txn(*conn);
 
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "SELECT group_id, trip_id, name, total_amount, currency, payer_user_id, gmt_created FROM payment_groups "
             "WHERE trip_id = $1 "
             "ORDER BY gmt_created DESC "
             "LIMIT $2 OFFSET $3",
-            tripId, pageSize, offset
+            pqxx::params{tripId, pageSize, offset}
         );
 
         std::vector<long long> groupIds;
@@ -107,11 +116,11 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
         }
         idArray += "}";
 
-        pqxx::result recordRes = txn.exec_params(
+        pqxx::result recordRes = txn.exec(
             "SELECT record_id, group_id, trip_id, amount, currency, from_user_id, to_user_id, gmt_created "
             "FROM payment_records WHERE group_id = ANY($1::bigint[]) "
             "ORDER BY gmt_created DESC",
-            idArray
+            pqxx::params{idArray}
         );
 
         std::map<long long, PaymentGroup*> groupMap;
@@ -143,16 +152,19 @@ std::vector<PaymentGroup> PaymentRepository::getPaymentGroups(long long tripId, 
 std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripId) {
     std::vector<PaymentGroup> groups;
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return groups;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error getting all payment groups: database connection unavailable" << std::endl;
+        return groups;
+    }
 
     try {
         pqxx::work txn(*conn);
 
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "SELECT group_id, trip_id, name, total_amount, currency, payer_user_id, gmt_created FROM payment_groups "
             "WHERE trip_id = $1 "
             "ORDER BY gmt_created DESC",
-            tripId
+            pqxx::params{tripId}
         );
 
         std::vector<long long> groupIds;
@@ -174,11 +186,11 @@ std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripI
             return groups;
         }
 
-        pqxx::result recordRes = txn.exec_params(
+        pqxx::result recordRes = txn.exec(
             "SELECT record_id, group_id, trip_id, amount, currency, from_user_id, to_user_id, gmt_created "
             "FROM payment_records WHERE trip_id = $1 "
             "ORDER BY gmt_created DESC",
-            tripId
+            pqxx::params{tripId}
         );
 
         std::map<long long, PaymentGroup*> groupMap;
@@ -210,17 +222,20 @@ std::vector<PaymentGroup> PaymentRepository::getAllPaymentGroups(long long tripI
 std::vector<PaymentRecord> PaymentRepository::getAllPaymentRecords(long long tripId) {
     std::vector<PaymentRecord> records;
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return records;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error getting all payment records: database connection unavailable" << std::endl;
+        return records;
+    }
 
     try {
         pqxx::work txn(*conn);
 
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "SELECT record_id, group_id, trip_id, amount, currency, from_user_id, to_user_id, gmt_created "
             "FROM payment_records "
             "WHERE trip_id = $1 "
             "ORDER BY gmt_created DESC",
-            tripId
+            pqxx::params{tripId}
         );
 
         for (const auto& row : res) {
@@ -242,13 +257,16 @@ std::vector<PaymentRecord> PaymentRepository::getAllPaymentRecords(long long tri
 
 bool PaymentRepository::deletePaymentGroup(long long paymentGroupId) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return false;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error deleting payment group: database connection unavailable" << std::endl;
+        return false;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "DELETE FROM payment_groups WHERE group_id = $1",
-            paymentGroupId
+            pqxx::params{paymentGroupId}
         );
         txn.commit();
         return res.affected_rows() > 0;

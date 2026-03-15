@@ -7,32 +7,35 @@ TripRepository::TripRepository(DatabaseManager& dbManager) : dbManager_(dbManage
 
 bool TripRepository::createDefaultChatAndTrip(long long chatId, long long threadId) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return false;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error creating default chat and trip: database connection unavailable" << std::endl;
+        return false;
+    }
 
     try {
         pqxx::work txn(*conn);
 
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "SELECT 1 FROM trips WHERE chat_id = $1 AND thread_id = $2 LIMIT 1",
-            chatId, threadId
+            pqxx::params{chatId, threadId}
         );
 
         if (!res.empty()) {
             return false;
         }
 
-        pqxx::result tripRes = txn.exec_params(
+        pqxx::result tripRes = txn.exec(
             "INSERT INTO trips (chat_id, thread_id, name) VALUES ($1, $2, 'default') RETURNING trip_id",
-            chatId, threadId
+            pqxx::params{chatId, threadId}
         );
 
         if (tripRes.empty()) return false;
         long long newTripId = tripRes[0][0].as<long long>();
 
-        txn.exec_params(
+        txn.exec(
             "INSERT INTO chats (chat_id, thread_id, active_trip_id) VALUES ($1, $2, $3) "
             "ON CONFLICT (chat_id, thread_id) DO UPDATE SET active_trip_id = $3",
-            chatId, threadId, newTripId
+            pqxx::params{chatId, threadId, newTripId}
         );
 
         txn.commit();
@@ -45,13 +48,16 @@ bool TripRepository::createDefaultChatAndTrip(long long chatId, long long thread
 
 long long TripRepository::createTrip(long long chatId, long long threadId, const std::string& name) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return -1;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error creating trip: database connection unavailable" << std::endl;
+        return -1;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "INSERT INTO trips (chat_id, thread_id, name) VALUES ($1, $2, $3) RETURNING trip_id",
-            chatId, threadId, name
+            pqxx::params{chatId, threadId, name}
         );
         txn.commit();
         
@@ -65,13 +71,16 @@ long long TripRepository::createTrip(long long chatId, long long threadId, const
 
 std::optional<Trip> TripRepository::getTrip(long long tripId) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return std::nullopt;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error getting trip: database connection unavailable" << std::endl;
+        return std::nullopt;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "SELECT trip_id, chat_id, thread_id, name, gmt_created FROM trips WHERE trip_id = $1",
-            tripId
+            pqxx::params{tripId}
         );
 
         if (res.empty()) return std::nullopt;
@@ -93,13 +102,16 @@ std::optional<Trip> TripRepository::getTrip(long long tripId) {
 std::vector<Trip> TripRepository::getAllTrips(long long chatId, long long threadId) {
     std::vector<Trip> trips;
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return trips;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error getting all trips: database connection unavailable" << std::endl;
+        return trips;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "SELECT trip_id, chat_id, thread_id, name, gmt_created FROM trips WHERE chat_id = $1 AND thread_id = $2 ORDER BY trip_id ASC",
-            chatId, threadId
+            pqxx::params{chatId, threadId}
         );
 
         for (const auto& row : res) {
@@ -119,13 +131,16 @@ std::vector<Trip> TripRepository::getAllTrips(long long chatId, long long thread
 
 bool TripRepository::updateTrip(const Trip& trip) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return false;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error updating trip: database connection unavailable" << std::endl;
+        return false;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "UPDATE trips SET name = $2 WHERE trip_id = $1",
-            trip.trip_id, trip.name
+            pqxx::params{trip.trip_id, trip.name}
         );
         txn.commit();
         return res.affected_rows() > 0;
@@ -137,13 +152,16 @@ bool TripRepository::updateTrip(const Trip& trip) {
 
 bool TripRepository::deleteTrip(long long tripId) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return false;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error deleting trip: database connection unavailable" << std::endl;
+        return false;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "DELETE FROM trips WHERE trip_id = $1",
-            tripId
+            pqxx::params{tripId}
         );
         txn.commit();
         return res.affected_rows() > 0;
@@ -155,13 +173,16 @@ bool TripRepository::deleteTrip(long long tripId) {
 
 bool TripRepository::updateActiveTrip(long long chatId, long long threadId, long long tripId) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return false;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error updating active trip: database connection unavailable" << std::endl;
+        return false;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "UPDATE chats SET active_trip_id = $3 WHERE chat_id = $1 AND thread_id = $2",
-            chatId, threadId, tripId
+            pqxx::params{chatId, threadId, tripId}
         );
         txn.commit();
         return res.affected_rows() > 0;
@@ -173,16 +194,19 @@ bool TripRepository::updateActiveTrip(long long chatId, long long threadId, long
 
 std::optional<Trip> TripRepository::getActiveTrip(long long chatId, long long threadId) {
     pqxx::connection* conn = dbManager_.getConnection();
-    if (!conn || !conn->is_open()) return std::nullopt;
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error getting active trip: database connection unavailable" << std::endl;
+        return std::nullopt;
+    }
 
     try {
         pqxx::work txn(*conn);
-        pqxx::result res = txn.exec_params(
+        pqxx::result res = txn.exec(
             "SELECT t.trip_id, t.chat_id, t.thread_id, t.name, t.gmt_created "
             "FROM trips t "
             "JOIN chats c ON t.trip_id = c.active_trip_id "
             "WHERE c.chat_id = $1 AND c.thread_id = $2",
-            chatId, threadId
+            pqxx::params{chatId, threadId}
         );
 
         if (res.empty()) return std::nullopt;
