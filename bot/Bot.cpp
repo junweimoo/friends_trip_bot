@@ -266,6 +266,8 @@ void Bot::poll() {
             if (msg.text[0] == '/') {
                 size_t spacePos = msg.text.find(' ');
                 std::string command = (spacePos == std::string::npos) ? msg.text : msg.text.substr(0, spacePos);
+                size_t atPos = command.find('@');
+                if (atPos != std::string::npos) command = command.substr(0, atPos);
                 if (commandHandlers.find(command) != commandHandlers.end()) {
                     // Dispatch command
                     std::thread(commandHandlers[command], msg).detach();
