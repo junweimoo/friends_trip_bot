@@ -16,42 +16,35 @@
 
 void loadEnv(const std::string& filename) {
     std::ifstream file(filename);
-    if (!file.is_open()) {
-        return;
-    }
+    if (!file.is_open()) return;
 
     std::string line;
     while (std::getline(file, line)) {
         if (line.empty() || line[0] == '#') continue;
-
-        size_t delimiterPos = line.find('=');
-        if (delimiterPos != std::string::npos) {
-            std::string key = line.substr(0, delimiterPos);
-            std::string value = line.substr(delimiterPos + 1);
-            setenv(key.c_str(), value.c_str(), 1);
+        size_t delimPos = line.find('=');
+        if (delimPos != std::string::npos) {
+            setenv(line.substr(0, delimPos).c_str(), line.substr(delimPos + 1).c_str(), 1);
         }
     }
 }
 
+std::string buildDbConnString() {
+    const char* host = std::getenv("POSTGRES_HOST");
+    const char* port = std::getenv("POSTGRES_PORT");
+    const char* name = std::getenv("POSTGRES_DB");
+    const char* user = std::getenv("POSTGRES_USER");
+    const char* pass = std::getenv("POSTGRES_PASSWORD");
+
+    if (!host || !port || !name || !user || !pass) return "";
+
+    std::stringstream ss;
+    ss << "host=" << host << " port=" << port << " dbname=" << name
+       << " user=" << user << " password=" << pass;
+    return ss.str();
+}
+
 int main() {
-    // Load .env file
     loadEnv(".env");
-
-    // Database connection
-    const char* dbHost = std::getenv("POSTGRES_HOST");
-    const char* dbPort = std::getenv("POSTGRES_PORT");
-    const char* dbName = std::getenv("POSTGRES_DB");
-    const char* dbUser = std::getenv("POSTGRES_USER");
-    const char* dbPass = std::getenv("POSTGRES_PASSWORD");
-
-    std::unique_ptr<DatabaseManager> db;
-
-    std::unique_ptr<UserRepository> userRepo;
-    std::unique_ptr<PaymentRepository> paymentRepo;
-    std::unique_ptr<TripRepository> tripRepo;
-
-    std::unique_ptr<UserService> userService;
-    std::unique_ptr<PaymentService> paymentService;
 
     const char* tokenEnv = std::getenv("TELEGRAM_BOT_TOKEN");
     if (!tokenEnv) {
@@ -59,37 +52,34 @@ int main() {
         return 1;
     }
 
-    std::string token(tokenEnv);
-    bot::Bot myBot(token);
-
-    if (dbHost && dbPort && dbName && dbUser && dbPass) {
-        std::stringstream ss;
-        ss << "host=" << dbHost << " port=" << dbPort << " dbname=" << dbName
-           << " user=" << dbUser << " password=" << dbPass;
-
-        db = std::make_unique<DatabaseManager>(ss.str());
-        db->connect();
-
-        // Ensure tables exist
-        DatabaseSchema::createTables(*db);
-
-        userRepo = std::make_unique<UserRepository>(*db);
-        paymentRepo = std::make_unique<PaymentRepository>(*db);
-        tripRepo = std::make_unique<TripRepository>(*db);
-
-        userService = std::make_unique<UserService>(*userRepo, myBot);
-        paymentService = std::make_unique<PaymentService>(*paymentRepo, *tripRepo, myBot);
-    } else {
-        std::cerr << "Warning: Database environment variables not fully set. Skipping DB connection." << std::endl;
+    std::string dbConnString = buildDbConnString();
+    if (dbConnString.empty()) {
+        std::cerr << "Error: Database environment variables not fully set." << std::endl;
+        return 1;
     }
 
-    // Register all handlers
+    // Database
+    auto db = std::make_unique<DatabaseManager>(dbConnString);
+    db->connect();
+    DatabaseSchema::createTables(*db);
+
+    // Repositories
+    auto userRepo    = std::make_unique<UserRepository>(*db);
+    auto paymentRepo = std::make_unique<PaymentRepository>(*db);
+    auto tripRepo    = std::make_unique<TripRepository>(*db);
+
+    // Bot
+    bot::Bot myBot(tokenEnv);
+
+    // Services
+    auto userService    = std::make_unique<UserService>(*userRepo, myBot);
+    auto paymentService = std::make_unique<PaymentService>(*paymentRepo, *tripRepo, myBot);
+
+    // Register handlers and start
     handlers::Services services{*userService, *paymentService};
     handlers::Repositories repos{*userRepo, *tripRepo, *paymentRepo};
     handlers::registerHandlers(myBot, services, repos);
 
-    // Start the bot
     myBot.start();
-
     return 0;
 }
