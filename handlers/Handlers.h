@@ -3,6 +3,7 @@
 
 #include "../bot/Bot.h"
 #include "../service/UserService.h"
+#include "../service/PaymentService.h"
 
 class PaymentRepository;
 class TripRepository;
@@ -11,6 +12,7 @@ namespace handlers {
 
 struct Services {
     UserService& userService;
+    PaymentService& paymentService;
 };
 
 struct Repositories {

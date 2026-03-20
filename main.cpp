@@ -12,6 +12,7 @@
 #include "repository/PaymentRepository.h"
 #include "repository/TripRepository.h"
 #include "service/UserService.h"
+#include "service/PaymentService.h"
 
 void loadEnv(const std::string& filename) {
     std::ifstream file(filename);
@@ -50,6 +51,16 @@ int main() {
     std::unique_ptr<TripRepository> tripRepo;
 
     std::unique_ptr<UserService> userService;
+    std::unique_ptr<PaymentService> paymentService;
+
+    const char* tokenEnv = std::getenv("TELEGRAM_BOT_TOKEN");
+    if (!tokenEnv) {
+        std::cerr << "Error: TELEGRAM_BOT_TOKEN environment variable not set." << std::endl;
+        return 1;
+    }
+
+    std::string token(tokenEnv);
+    bot::Bot myBot(token);
 
     if (dbHost && dbPort && dbName && dbUser && dbPass) {
         std::stringstream ss;
@@ -66,22 +77,14 @@ int main() {
         paymentRepo = std::make_unique<PaymentRepository>(*db);
         tripRepo = std::make_unique<TripRepository>(*db);
 
-        userService = std::make_unique<UserService>(*userRepo);
+        userService = std::make_unique<UserService>(*userRepo, myBot);
+        paymentService = std::make_unique<PaymentService>(*paymentRepo, *tripRepo, myBot);
     } else {
         std::cerr << "Warning: Database environment variables not fully set. Skipping DB connection." << std::endl;
     }
 
-    const char* tokenEnv = std::getenv("TELEGRAM_BOT_TOKEN");
-    if (!tokenEnv) {
-        std::cerr << "Error: TELEGRAM_BOT_TOKEN environment variable not set." << std::endl;
-        return 1;
-    }
-
-    std::string token(tokenEnv);
-    bot::Bot myBot(token);
-
     // Register all handlers
-    handlers::Services services{*userService};
+    handlers::Services services{*userService, *paymentService};
     handlers::Repositories repos{*userRepo, *tripRepo, *paymentRepo};
     handlers::registerHandlers(myBot, services, repos);
 

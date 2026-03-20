@@ -54,6 +54,7 @@ add_executable(friends_trip_bot
     repository/TripRepository.cpp
     repository/PaymentRepository.cpp
     service/UserService.cpp
+    service/PaymentService.cpp
     conversations/RecordPaymentConversation.cpp
     conversations/ListPaymentsConversation.cpp
     conversations/TripsConversation.cpp

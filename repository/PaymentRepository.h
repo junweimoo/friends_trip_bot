@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <optional>
 #include "../utils/MoneyAmount.h"
 
 class DatabaseManager;
@@ -43,6 +44,8 @@ public:
     std::vector<PaymentRecord> getAllPaymentRecords(long long tripId);
 
     bool deletePaymentGroup(long long paymentGroupId);
+
+    std::optional<PaymentGroup> deleteLastPaymentGroup(long long tripId);
 
 private:
     DatabaseManager& dbManager_;

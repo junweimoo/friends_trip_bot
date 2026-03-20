@@ -255,6 +255,66 @@ std::vector<PaymentRecord> PaymentRepository::getAllPaymentRecords(long long tri
     return records;
 }
 
+std::optional<PaymentGroup> PaymentRepository::deleteLastPaymentGroup(long long tripId) {
+    pqxx::connection* conn = dbManager_.getConnection();
+    if (!conn || !conn->is_open()) {
+        std::cerr << "Error deleting last payment group: database connection unavailable" << std::endl;
+        return std::nullopt;
+    }
+
+    try {
+        pqxx::work txn(*conn);
+
+        pqxx::result groupRes = txn.exec(
+            "SELECT group_id, trip_id, name, total_amount, currency, payer_user_id, gmt_created "
+            "FROM payment_groups WHERE trip_id = $1 ORDER BY gmt_created DESC LIMIT 1",
+            pqxx::params{tripId}
+        );
+
+        if (groupRes.empty()) return std::nullopt;
+
+        const auto& groupRow = groupRes[0];
+        long long groupId = groupRow["group_id"].as<long long>();
+
+        PaymentGroup group{
+            groupId,
+            groupRow["trip_id"].as<long long>(),
+            groupRow["name"].c_str(),
+            MoneyAmount(groupRow["currency"].c_str(), groupRow["total_amount"].as<long long>()),
+            groupRow["payer_user_id"].as<long long>(),
+            utils::parseTimestamp(groupRow["gmt_created"].c_str()),
+            {}
+        };
+
+        pqxx::result recordRes = txn.exec(
+            "SELECT record_id, group_id, trip_id, amount, currency, from_user_id, to_user_id, gmt_created "
+            "FROM payment_records WHERE group_id = $1 ORDER BY gmt_created DESC",
+            pqxx::params{groupId}
+        );
+
+        for (const auto& row : recordRes) {
+            group.records.emplace_back(PaymentRecord{
+                row["record_id"].as<long long>(),
+                groupId,
+                row["trip_id"].as<long long>(),
+                MoneyAmount(row["currency"].c_str(), row["amount"].as<long long>()),
+                row["from_user_id"].as<long long>(),
+                row["to_user_id"].as<long long>(),
+                utils::parseTimestamp(row["gmt_created"].c_str())
+            });
+        }
+
+        txn.exec("DELETE FROM payment_records WHERE group_id = $1", pqxx::params{groupId});
+        txn.exec("DELETE FROM payment_groups WHERE group_id = $1", pqxx::params{groupId});
+
+        txn.commit();
+        return group;
+    } catch (const std::exception& e) {
+        std::cerr << "Error deleting last payment group: " << e.what() << std::endl;
+        return std::nullopt;
+    }
+}
+
 bool PaymentRepository::deletePaymentGroup(long long paymentGroupId) {
     pqxx::connection* conn = dbManager_.getConnection();
     if (!conn || !conn->is_open()) {

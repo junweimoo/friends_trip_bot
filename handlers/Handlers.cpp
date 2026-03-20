@@ -11,18 +11,14 @@ namespace handlers {
 
 void registerHandlers(bot::Bot& bot, const Services& services, const Repositories& repos) {
     // register handler
-    bot.registerCommandHandler("/register", [&bot, &userService = services.userService](const bot::Message& msg) {
+    bot.registerCommandHandler("/register", [&userService = services.userService](const bot::Message& msg) {
         User user;
         user.user_id = msg.sender_id;
         user.chat_id = msg.chat_id;
         user.thread_id = 0;
         user.name = msg.sender_name;
 
-        if (userService.registerUser(user)) {
-            bot.sendMessage(msg.chat_id, "Successfully registered!");
-        } else {
-            bot.sendMessage(msg.chat_id, "An error occured during registration.");
-        }
+        userService.registerUser(user);
     });
 
     // record payment handler
@@ -54,6 +50,11 @@ void registerHandlers(bot::Bot& bot, const Services& services, const Repositorie
         auto convo = std::make_unique<TripsConversation>(
             msg.chat_id, msg.sender_id, bot, repos.tripRepository);
         bot.registerConversation(std::move(convo));
+    });
+
+    // undo last payment handler
+    bot.registerCommandHandler("/undo", [&paymentService = services.paymentService](const bot::Message& msg) {
+        paymentService.undoLastPaymentInActiveTrip(msg.chat_id, 0);
     });
 }
 

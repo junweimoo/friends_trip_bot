@@ -1,10 +1,17 @@
 #include "UserService.h"
 #include <iostream>
 
-UserService::UserService(UserRepository& userRepository) : userRepository_(userRepository) {}
+UserService::UserService(UserRepository& userRepository, bot::Bot& bot)
+    : userRepository_(userRepository), bot_(bot) {}
 
 bool UserService::registerUser(const User& user) {
-    return userRepository_.registerUserWithDefaultTrip(user);
+    bool success = userRepository_.registerUserWithDefaultTrip(user);
+    if (success) {
+        bot_.sendMessage(user.chat_id, "Successfully registered!");
+    } else {
+        bot_.sendMessage(user.chat_id, "An error occured during registration.");
+    }
+    return success;
 }
 
 std::optional<User> UserService::getUserDetails(long long userId, long long chatId, long long threadId) {
