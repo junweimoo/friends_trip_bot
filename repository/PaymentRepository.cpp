@@ -5,6 +5,7 @@
 #include <pqxx/pqxx>
 #include <map>
 #include <chrono>
+#include <spdlog/spdlog.h>
 
 PaymentRepository::PaymentRepository(DatabaseManager& dbManager) : dbManager_(dbManager) {}
 
@@ -36,6 +37,9 @@ bool PaymentRepository::createPaymentGroup(const PaymentGroup& group) {
         }
 
         txn.commit();
+        spdlog::info("Created payment group: group_id={}, trip_id={}, name='{}', total_amount={} {}, payer_user_id={}, records={}",
+                     groupId, group.trip_id, group.name, group.total_amount.minorAmount(), group.total_amount.currency(),
+                     group.payer_user_id, group.records.size());
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Error creating payment group: " << e.what() << std::endl;
@@ -308,6 +312,9 @@ std::optional<PaymentGroup> PaymentRepository::deleteLastPaymentGroup(long long 
         txn.exec("DELETE FROM payment_groups WHERE group_id = $1", pqxx::params{groupId});
 
         txn.commit();
+        spdlog::info("Deleted last payment group: group_id={}, trip_id={}, name='{}', total_amount={} {}, payer_user_id={}, records={}",
+                     group.payment_group_id, group.trip_id, group.name, group.total_amount.minorAmount(),
+                     group.total_amount.currency(), group.payer_user_id, group.records.size());
         return group;
     } catch (const std::exception& e) {
         std::cerr << "Error deleting last payment group: " << e.what() << std::endl;
@@ -329,6 +336,9 @@ bool PaymentRepository::deletePaymentGroup(long long paymentGroupId) {
             pqxx::params{paymentGroupId}
         );
         txn.commit();
+        if (res.affected_rows() > 0) {
+            spdlog::info("Deleted payment group: group_id={}", paymentGroupId);
+        }
         return res.affected_rows() > 0;
     } catch (const std::exception& e) {
         std::cerr << "Error deleting payment group: " << e.what() << std::endl;

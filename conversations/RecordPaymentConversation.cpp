@@ -555,7 +555,6 @@ void RecordPaymentConversation::completeConversation() {
 
     if (payRepo_.createPaymentGroup(paymentGroup)) {
         bot_.editMessage(chat_id, active_message_id, overviewMsg.str(), nullptr, "HTML");
-        spdlog::info("Payment group created successfully: {}", paymentGroup.name);
     } else {
         bot_.editMessage(chat_id, active_message_id, "Failed to record payment. Please try again.");
     }

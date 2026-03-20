@@ -1,6 +1,7 @@
 #include "UserRepository.h"
 #include <iostream>
 #include <pqxx/pqxx>
+#include <spdlog/spdlog.h>
 
 UserRepository::UserRepository(DatabaseManager& dbManager) : dbManager_(dbManager) {}
 
@@ -18,6 +19,8 @@ bool UserRepository::createUser(const User& user) {
             pqxx::params{user.user_id, user.chat_id, user.thread_id, user.name}
         );
         txn.commit();
+        spdlog::info("Created user: user_id={}, chat_id={}, thread_id={}, name='{}'",
+                     user.user_id, user.chat_id, user.thread_id, user.name);
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Error creating user: " << e.what() << std::endl;
@@ -42,6 +45,9 @@ bool UserRepository::registerUserWithDefaultTrip(const User& user) {
             pqxx::params{user.user_id, user.chat_id, user.thread_id, user.name}
         );
 
+        spdlog::info("Registering user with default trip: user_id={}, chat_id={}, thread_id={}, name='{}'",
+                     user.user_id, user.chat_id, user.thread_id, user.name);
+
         // 2. Check if a trip already exists for this chat/thread
         pqxx::result tripRes = txn.exec(
             "SELECT trip_id FROM trips WHERE chat_id = $1 AND thread_id = $2 LIMIT 1",
@@ -56,6 +62,8 @@ bool UserRepository::registerUserWithDefaultTrip(const User& user) {
                 pqxx::params{user.chat_id, user.thread_id}
             );
             tripId = newTripRes[0][0].as<long long>();
+
+            spdlog::info("Created default trip: trip_id={}, chat_id={}, thread_id={}", tripId, user.chat_id, user.thread_id);
 
             // 4. Create/Update chat with active trip
             txn.exec(
@@ -150,6 +158,10 @@ bool UserRepository::updateUser(const User& user) {
             pqxx::params{user.user_id, user.chat_id, user.thread_id, user.name}
         );
         txn.commit();
+        if (res.affected_rows() > 0) {
+            spdlog::info("Updated user: user_id={}, chat_id={}, thread_id={}, name='{}'",
+                         user.user_id, user.chat_id, user.thread_id, user.name);
+        }
         return res.affected_rows() > 0;
     } catch (const std::exception& e) {
         std::cerr << "Error updating user: " << e.what() << std::endl;
@@ -171,6 +183,9 @@ bool UserRepository::deleteUser(long long userId, long long chatId, long long th
             pqxx::params{userId, chatId, threadId}
         );
         txn.commit();
+        if (res.affected_rows() > 0) {
+            spdlog::info("Deleted user: user_id={}, chat_id={}, thread_id={}", userId, chatId, threadId);
+        }
         return res.affected_rows() > 0;
     } catch (const std::exception& e) {
         std::cerr << "Error deleting user: " << e.what() << std::endl;

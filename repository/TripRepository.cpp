@@ -2,6 +2,7 @@
 #include "../database/DatabaseManager.h"
 #include <iostream>
 #include <pqxx/pqxx>
+#include <spdlog/spdlog.h>
 
 TripRepository::TripRepository(DatabaseManager& dbManager) : dbManager_(dbManager) {}
 
@@ -39,6 +40,7 @@ bool TripRepository::createDefaultChatAndTrip(long long chatId, long long thread
         );
 
         txn.commit();
+        spdlog::info("Created default chat and trip: chat_id={}, thread_id={}, trip_id={}", chatId, threadId, newTripId);
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Error in createDefaultChatAndTrip: " << e.what() << std::endl;
@@ -60,9 +62,11 @@ long long TripRepository::createTrip(long long chatId, long long threadId, const
             pqxx::params{chatId, threadId, name}
         );
         txn.commit();
-        
+
         if (res.empty()) return -1;
-        return res[0][0].as<long long>();
+        long long tripId = res[0][0].as<long long>();
+        spdlog::info("Created trip: trip_id={}, chat_id={}, thread_id={}, name='{}'", tripId, chatId, threadId, name);
+        return tripId;
     } catch (const std::exception& e) {
         std::cerr << "Error creating trip: " << e.what() << std::endl;
         return -1;
@@ -143,6 +147,9 @@ bool TripRepository::updateTrip(const Trip& trip) {
             pqxx::params{trip.trip_id, trip.name}
         );
         txn.commit();
+        if (res.affected_rows() > 0) {
+            spdlog::info("Updated trip: trip_id={}, name='{}'", trip.trip_id, trip.name);
+        }
         return res.affected_rows() > 0;
     } catch (const std::exception& e) {
         std::cerr << "Error updating trip: " << e.what() << std::endl;
@@ -164,6 +171,9 @@ bool TripRepository::deleteTrip(long long tripId) {
             pqxx::params{tripId}
         );
         txn.commit();
+        if (res.affected_rows() > 0) {
+            spdlog::info("Deleted trip: trip_id={}", tripId);
+        }
         return res.affected_rows() > 0;
     } catch (const std::exception& e) {
         std::cerr << "Error deleting trip: " << e.what() << std::endl;
@@ -185,6 +195,9 @@ bool TripRepository::updateActiveTrip(long long chatId, long long threadId, long
             pqxx::params{chatId, threadId, tripId}
         );
         txn.commit();
+        if (res.affected_rows() > 0) {
+            spdlog::info("Updated active trip: chat_id={}, thread_id={}, trip_id={}", chatId, threadId, tripId);
+        }
         return res.affected_rows() > 0;
     } catch (const std::exception& e) {
         std::cerr << "Error updating active trip: " << e.what() << std::endl;
