@@ -1,12 +1,13 @@
 #include "TripsConversation.h"
 #include <sstream>
 
-TripsConversation::TripsConversation(long long chat_id, long long user_id, bot::Bot& bot, TripRepository& tripRepo)
-    : Conversation(chat_id, 0, user_id, bot), bot_(bot), tripRepo_(tripRepo),
+TripsConversation::TripsConversation(long long chat_id, long long user_id, bot::Bot& bot, TripRepository& tripRepo, UserRepository& userRepo)
+    : Conversation(chat_id, 0, user_id, bot), bot_(bot), tripRepo_(tripRepo), userRepo_(userRepo),
       currentState_(State::ShowingTrips), message_id_(0), closed_(false) {
 
     allTrips_ = tripRepo_.getAllTrips(chat_id, 0);
     activeTrip_ = tripRepo_.getActiveTrip(chat_id, 0); // Assuming thread_id is 0 for chat-wide trips
+    users_ = userRepo_.getUsersByChatAndThread(chat_id, 0);
     sendTripList(false);
 }
 
@@ -34,10 +35,19 @@ bool TripsConversation::isClosed() const {
 
 void TripsConversation::sendTripList(bool edit) {
     std::stringstream ss;
-    ss << "Please select a trip or create a new one:";
+    ss << "Registered users: ";
+    for (size_t i = 0; i < users_.size(); ++i) {
+        if (i > 0) ss << ", ";
+        ss << users_[i].name;
+    }
+    ss << "\n\nPlease select a trip or create a new one:";
 
     bot::InlineKeyboardMarkup keyboard;
     keyboard.inline_keyboard.push_back({{"➕ New Trip", "new_trip"}});
+
+    if (allTrips_.size() >= 2) {
+        keyboard.inline_keyboard.push_back({{"🗑️ Delete current trip", "delete_trip"}});
+    }
 
     for (const auto& trip : allTrips_) {
         std::string buttonText = trip.name;
@@ -47,9 +57,6 @@ void TripsConversation::sendTripList(bool edit) {
         keyboard.inline_keyboard.push_back({{buttonText, "trip_" + std::to_string(trip.trip_id)}});
     }
 
-    if (allTrips_.size() >= 2) {
-        keyboard.inline_keyboard.push_back({{"🗑️ Delete current trip", "delete_trip"}});
-    }
     keyboard.inline_keyboard.push_back({{"Close", "close"}});
 
     if (edit) {

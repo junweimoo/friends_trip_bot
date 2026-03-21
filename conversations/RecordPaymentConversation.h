@@ -19,8 +19,8 @@ public:
 private:
     enum class State {
         Description,
-        Amount,
         Currency,
+        Amount,
         Payer,
         Recipient,
         ManualRecipient,
@@ -30,8 +30,8 @@ private:
     };
 
     void handleDescription(const bot::Update& update);
-    void handleAmount(const bot::Update& update);
     void handleCurrency(const bot::Update& update);
+    void handleAmount(const bot::Update& update);
     void handlePayer(const bot::Update& update);
     void handleRecipient(const bot::Update& update);
     void handleSingleRecipient(const bot::Update& update);
@@ -61,6 +61,7 @@ private:
     // Allocated amounts stored as minor units (same currency as paymentGroup.total_amount)
     std::unordered_map<long long, long long> allocatedAmounts;
     double pendingRawAmount_ = 0.0;
+    std::string pendingCurrency_;
     long long current_recipient_id;
 
     PaymentGroup paymentGroup;

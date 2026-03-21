@@ -55,11 +55,11 @@ void RecordPaymentConversation::handleUpdate(const bot::Update& update) {
         case State::Description:
             handleDescription(update);
             break;
-        case State::Amount:
-            handleAmount(update);
-            break;
         case State::Currency:
             handleCurrency(update);
+            break;
+        case State::Amount:
+            handleAmount(update);
             break;
         case State::Payer:
             handlePayer(update);
@@ -120,6 +120,43 @@ void RecordPaymentConversation::handleDescription(const bot::Update& update) {
     editedMsg << "✅ Payment Name: " << paymentGroup.name;
     bot_.editMessage(chat_id, active_message_id, editedMsg.str());
 
+    // Ask for currency
+    bot::InlineKeyboardMarkup keyboard;
+    std::vector<std::string> currencies = {
+        "USD", "EUR", "GBP",
+        "JPY", "AUD", "CAD",
+        "CHF", "CNY", "SEK",
+        "NZD", "SGD", "MYR"};
+
+    std::vector<bot::InlineKeyboardButton> row;
+    for (const auto& curr : currencies) {
+        row.push_back({curr, createCallbackData(State::Currency, curr)});
+        if (row.size() == 3) {
+            keyboard.inline_keyboard.push_back(row);
+            row.clear();
+        }
+    }
+    if (!row.empty()) keyboard.inline_keyboard.push_back(row);
+
+    currentState_ = State::Currency;
+    active_message_id = bot_.sendMessage(chat_id, "Select currency:", &keyboard);
+}
+
+void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
+    if (update.callback_query.id.empty()) return;
+    bot_.answerCallbackQuery(update.callback_query.id);
+
+    State targetState;
+    std::string data;
+    if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
+
+    pendingCurrency_ = data;
+
+    // Update original message
+    std::stringstream editedMsg;
+    editedMsg << "✅ Currency: " << pendingCurrency_;
+    bot_.editMessage(chat_id, active_message_id, editedMsg.str());
+
     // Ask for amount
     currentState_ = State::Amount;
     active_message_id = bot_.sendMessage(chat_id, "Enter the amount (e.g. 123 or 123.00):");
@@ -147,46 +184,11 @@ void RecordPaymentConversation::handleAmount(const bot::Update& update) {
         return;
     }
 
-    // Update original message (currency not yet known, display raw number)
-    std::stringstream editedMsg;
-    editedMsg << "✅ Amount: " << std::fixed << std::setprecision(2) << pendingRawAmount_;
-    bot_.editMessage(chat_id, active_message_id, editedMsg.str());
-
-    // Ask for currency
-    bot::InlineKeyboardMarkup keyboard;
-    std::vector<std::string> currencies = {
-        "USD", "EUR", "GBP",
-        "JPY", "AUD", "CAD",
-        "CHF", "CNY", "SEK",
-        "NZD", "SGD", "MYR"};
-
-    std::vector<bot::InlineKeyboardButton> row;
-    for (const auto& curr : currencies) {
-        row.push_back({curr, createCallbackData(State::Currency, curr)});
-        if (row.size() == 3) {
-            keyboard.inline_keyboard.push_back(row);
-            row.clear();
-        }
-    }
-    if (!row.empty()) keyboard.inline_keyboard.push_back(row);
-
-    currentState_ = State::Currency;
-    active_message_id = bot_.sendMessage(chat_id,  "Select currency:", &keyboard);
-}
-
-void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
-    if (update.callback_query.id.empty()) return;
-    bot_.answerCallbackQuery(update.callback_query.id);
-
-    State targetState;
-    std::string data;
-    if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
-
-    paymentGroup.total_amount = MoneyAmount::fromMajorUnits(data, pendingRawAmount_);
+    paymentGroup.total_amount = MoneyAmount::fromMajorUnits(pendingCurrency_, pendingRawAmount_);
 
     // Update original message
     std::stringstream editedMsg;
-    editedMsg << "✅ Currency: " << paymentGroup.total_amount.currency();
+    editedMsg << "✅ Amount: " << paymentGroup.total_amount.toHumanReadable();
     bot_.editMessage(chat_id, active_message_id, editedMsg.str());
 
     // Ask for Payer
@@ -196,7 +198,7 @@ void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
     }
 
     currentState_ = State::Payer;
-    active_message_id = bot_.sendMessage(chat_id,  "Who paid?", &keyboard);
+    active_message_id = bot_.sendMessage(chat_id, "Who paid?", &keyboard);
 }
 
 void RecordPaymentConversation::handlePayer(const bot::Update& update) {

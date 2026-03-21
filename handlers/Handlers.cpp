@@ -48,7 +48,7 @@ void registerHandlers(bot::Bot& bot, const Services& services, const Repositorie
     // trips (create, list, delete) handler
     bot.registerCommandHandler("/trips", [&bot, &repos](const bot::Message& msg) {
         auto convo = std::make_unique<TripsConversation>(
-            msg.chat_id, msg.sender_id, bot, repos.tripRepository);
+            msg.chat_id, msg.sender_id, bot, repos.tripRepository, repos.userRepository);
         bot.registerConversation(std::move(convo));
     });
 

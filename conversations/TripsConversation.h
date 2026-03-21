@@ -3,12 +3,13 @@
 
 #include "../bot/Bot.h"
 #include "../repository/TripRepository.h"
+#include "../repository/UserRepository.h"
 #include <vector>
 #include <optional>
 
 class TripsConversation : public bot::Conversation {
 public:
-    TripsConversation(long long chat_id, long long user_id, bot::Bot& bot, TripRepository& tripRepo);
+    TripsConversation(long long chat_id, long long user_id, bot::Bot& bot, TripRepository& tripRepo, UserRepository& userRepo);
     ~TripsConversation() override;
 
     void handleUpdate(const bot::Update& update) override;
@@ -29,10 +30,12 @@ private:
 
     bot::Bot& bot_;
     TripRepository& tripRepo_;
+    UserRepository& userRepo_;
 
     State currentState_;
     std::vector<Trip> allTrips_;
     std::optional<Trip> activeTrip_;
+    std::vector<User> users_;
     long long message_id_;
     bool closed_;
 };
