@@ -1,5 +1,8 @@
 #include "TripsConversation.h"
 #include <sstream>
+#include <algorithm>
+#include <cctype>
+
 
 TripsConversation::TripsConversation(long long chat_id, long long user_id, bot::Bot& bot, TripRepository& tripRepo, UserRepository& userRepo)
     : Conversation(chat_id, 0, user_id, bot), bot_(bot), tripRepo_(tripRepo), userRepo_(userRepo),
@@ -109,9 +112,37 @@ void TripsConversation::handleCallback(const bot::Update& update) {
     }
 }
 
+static std::string trimWhitespace(const std::string& str) {
+    auto start = std::find_if_not(str.begin(), str.end(), ::isspace);
+    auto end = std::find_if_not(str.rbegin(), str.rend(), ::isspace).base();
+    return (start < end) ? std::string(start, end) : std::string();
+}
+
+static std::string validateTripName(const std::string& name, const std::vector<Trip>& existingTrips) {
+    if (name.empty()) {
+        return "Trip name cannot be empty.";
+    }
+    if (name.size() > 25) {
+        return "Trip name cannot exceed 25 characters.";
+    }
+    for (char c : name) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != ' ' && c != '-' && c != '_') {
+            return "Trip name can only contain letters, numbers, spaces, hyphens, and underscores.";
+        }
+    }
+    for (const auto& trip : existingTrips) {
+        if (trip.name == name) {
+            return "A trip with this name already exists.";
+        }
+    }
+    return "";
+}
+
 void TripsConversation::handleNewTripName(const bot::Update& update) {
-    const std::string& newTripName = update.message.text;
-    if (newTripName.empty()) {
+    std::string newTripName = trimWhitespace(update.message.text);
+    std::string error = validateTripName(newTripName, allTrips_);
+    if (!error.empty()) {
+        bot_.sendMessage(chat_id, error);
         return;
     }
     if (long long newTripId = tripRepo_.createTrip(chat_id, 0, newTripName); newTripId != -1) {

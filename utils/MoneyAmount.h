@@ -9,6 +9,14 @@
 
 // Currencies that have no subunit (1 unit = 1 minor unit, no decimal places)
 // e.g. JPY: 1 yen = 1 minor unit, vs USD: 1 dollar = 100 cents (minor units)
+enum class AmountValidation { Positive, NonNegative };
+
+struct AmountParseResult {
+    bool success;
+    double amount;
+    std::string error;
+};
+
 class MoneyAmount {
 public:
     MoneyAmount() : currency_(""), amount_minor_(0) {}
@@ -60,6 +68,27 @@ public:
             ss << std::fixed << std::setprecision(2) << major << " " << currency_;
         }
         return ss.str();
+    }
+
+    static AmountParseResult parseAndValidateAmount(const std::string& input,
+                                                    AmountValidation validation = AmountValidation::Positive) {
+        try {
+            double amount = std::stod(input);
+            if (validation == AmountValidation::Positive && amount <= 0) {
+                return {false, 0, "Amount should be positive. Please enter a valid amount:"};
+            }
+            if (validation == AmountValidation::NonNegative && amount < 0) {
+                return {false, 0, "Amount cannot be negative. Please enter a valid amount:"};
+            }
+            if (std::isinf(amount)) {
+                return {false, 0, "Amount is too large. Please enter a valid amount:"};
+            }
+            return {true, amount, ""};
+        } catch (const std::out_of_range&) {
+            return {false, 0, "Amount is too large. Please enter a valid amount:"};
+        } catch (...) {
+            return {false, 0, "Invalid amount. Please enter a number (e.g. 123 or 123.00)."};
+        }
     }
 
     static bool isZeroDecimal(const std::string& currency) {

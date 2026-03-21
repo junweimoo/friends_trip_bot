@@ -1,14 +1,12 @@
 #include "RecordPaymentConversation.h"
 #include "../bot/Bot.h"
 #include "../utils/MoneyAmount.h"
-#include <iostream>
-#include <iomanip>
 #include <sstream>
-#include <cmath>
 #include <random>
 #include <algorithm>
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
+#include <cctype>
 
 using json = nlohmann::json;
 
@@ -104,11 +102,27 @@ bool RecordPaymentConversation::parseCallbackData(const std::string& jsonStr, St
     }
 }
 
+static std::string validateDescription(const std::string& name) {
+    if (name.empty()) {
+        return "Description cannot be empty.";
+    }
+    if (name.size() > 255) {
+        return "Description is too long (max 255 characters). Please enter a shorter name:";
+    }
+    for (char c : name) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != ' ' && c != '-' && c != '_') {
+            return "Description can only contain letters, numbers, spaces, hyphens, and underscores.";
+        }
+    }
+    return "";
+}
+
 void RecordPaymentConversation::handleDescription(const bot::Update& update) {
     if (update.message.message_id == 0) return;
 
-    if (update.message.text.length() > 255) {
-        bot_.editMessage(chat_id, active_message_id, "Description is too long (max 255 characters). Please enter a shorter name:");
+    std::string error = validateDescription(update.message.text);
+    if (!error.empty()) {
+        bot_.editMessage(chat_id, active_message_id, error);
         return;
     }
 
@@ -165,24 +179,12 @@ void RecordPaymentConversation::handleCurrency(const bot::Update& update) {
 void RecordPaymentConversation::handleAmount(const bot::Update& update) {
     if (update.message.message_id == 0) return;
 
-    try {
-        double inputAmount = std::stod(update.message.text);
-        if (inputAmount <= 0) {
-            bot_.editMessage(chat_id, active_message_id, "Amount should be positive. Please enter a valid amount:");
-            return;
-        }
-        if (std::isinf(inputAmount)) {
-            bot_.editMessage(chat_id, active_message_id, "Amount is too large. Please enter a valid amount:");
-            return;
-        }
-        pendingRawAmount_ = inputAmount;
-    } catch (const std::out_of_range&) {
-        bot_.editMessage(chat_id, active_message_id, "Amount is too large. Please enter a valid amount:");
-        return;
-    } catch (...) {
-        bot_.editMessage(chat_id, active_message_id, "Invalid amount. Please enter a number (e.g. 123 or 123.00).");
+    auto result = MoneyAmount::parseAndValidateAmount(update.message.text, AmountValidation::Positive);
+    if (!result.success) {
+        bot_.editMessage(chat_id, active_message_id, result.error);
         return;
     }
+    pendingRawAmount_ = result.amount;
 
     paymentGroup.total_amount = MoneyAmount::fromMajorUnits(pendingCurrency_, pendingRawAmount_);
 
@@ -238,9 +240,9 @@ void RecordPaymentConversation::sendPayerSelection(bool editMessage) {
         [](long long, const User& user) { return user.name; });
 
     if (editMessage) {
-        bot_.editMessage(chat_id, active_message_id, "Who paid?", &keyboard);
+        bot_.editMessage(chat_id, active_message_id, "Select the payer:", &keyboard);
     } else {
-        active_message_id = bot_.sendMessage(chat_id, "Who paid?", &keyboard);
+        active_message_id = bot_.sendMessage(chat_id, "Select the payer:", &keyboard);
     }
 }
 
@@ -563,26 +565,16 @@ void RecordPaymentConversation::handleManualRecipient(const bot::Update& update)
 void RecordPaymentConversation::handleManualAmount(const bot::Update& update) {
     if (update.message.message_id == 0) return;
 
-    try {
-        double inputAmount = std::stod(update.message.text);
-        if (inputAmount < 0) {
-            bot_.editMessage(chat_id, active_message_id, "Amount cannot be negative. Please enter a valid amount:");
-            return;
-        }
-        if (std::isinf(inputAmount)) {
-            bot_.editMessage(chat_id, active_message_id, "Amount is too large. Please enter a valid amount:");
-            return;
-        }
-        long long minorAmount = MoneyAmount::fromMajorUnits(paymentGroup.total_amount.currency(), inputAmount).minorAmount();
-        allocatedAmounts[current_recipient_id] = minorAmount;
-
-        currentState_ = State::ManualRecipient;
-        sendManualRecipients(true);
-    } catch (const std::out_of_range&) {
-        bot_.editMessage(chat_id, active_message_id, "Amount is too large. Please enter a valid amount:");
-    } catch (...) {
-        bot_.editMessage(chat_id, active_message_id, "Invalid amount. Please enter a number.");
+    auto result = MoneyAmount::parseAndValidateAmount(update.message.text, AmountValidation::NonNegative);
+    if (!result.success) {
+        bot_.editMessage(chat_id, active_message_id, result.error);
+        return;
     }
+    long long minorAmount = MoneyAmount::fromMajorUnits(paymentGroup.total_amount.currency(), result.amount).minorAmount();
+    allocatedAmounts[current_recipient_id] = minorAmount;
+
+    currentState_ = State::ManualRecipient;
+    sendManualRecipients(true);
 }
 
 void RecordPaymentConversation::completeConversation() {
