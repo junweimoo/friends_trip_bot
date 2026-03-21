@@ -3,6 +3,7 @@
 
 #include <string>
 #include <functional>
+#include <chrono>
 #include <map>
 #include <vector>
 #include <atomic>
@@ -57,7 +58,7 @@ public:
     void answerCallbackQuery(const std::string& callbackQueryId, const std::string& text = "", bool showAlert = false);
     Chat getChat(long long chatId);
 
-    std::string storeCallback(std::function<void()> callback);
+    std::string storeCallback(std::function<void()> callback, int expiryHours = 72);
     std::optional<std::function<void()>> fetchCallback(const std::string& key);
 
 private:
@@ -93,10 +94,17 @@ private:
         PairHash
     > conversations;
 
+    struct StoredCallback {
+        std::function<void()> callback;
+        std::chrono::steady_clock::time_point storedAt;
+        std::chrono::hours expiry;
+    };
+
     std::atomic<uint64_t> callbackCounter_{0};
-    phmap::parallel_flat_hash_map<std::string, std::function<void()>> callbacks_;
+    phmap::parallel_flat_hash_map<std::string, StoredCallback> callbacks_;
 
     void poll();
+    void sweepExpiredCallbacks();
     std::vector<Update> getUpdates();
     std::string makeRequest(const std::string& endpoint, const std::string& params = "");
 };

@@ -8,6 +8,9 @@ namespace bot {
 // UTC offset in hours for the timezone that hh:mm:ss values are defined in (GMT+8)
 constexpr int TIMEZONE_UTC_OFFSET = 8;
 
+// Tolerance in seconds to account for early wakeups from wait_until
+constexpr int WAKE_TOLERANCE_SECS = 2;
+
 Scheduler::Scheduler() = default;
 
 Scheduler::~Scheduler() {
@@ -41,7 +44,7 @@ void Scheduler::workerLoop() {
     while (running) {
         auto now = std::chrono::system_clock::now();
         nowUtc = std::chrono::system_clock::to_time_t(now);
-        std::time_t nowTime = nowUtc + TIMEZONE_UTC_OFFSET * 3600;
+        std::time_t nowTime = nowUtc + TIMEZONE_UTC_OFFSET * 3600 + WAKE_TOLERANCE_SECS;
         std::tm localNow{};
         gmtime_r(&nowTime, &localNow);
 

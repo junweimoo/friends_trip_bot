@@ -22,6 +22,8 @@ Bot::Bot(const std::string& token, Scheduler& scheduler)
       running(false),
       lastUpdateId(0) {
     curl_global_init(CURL_GLOBAL_DEFAULT);
+
+    scheduler.registerTask([this] { sweepExpiredCallbacks(); }, true, 0, 0, 0);
 }
 
 Bot::~Bot() {
@@ -54,19 +56,33 @@ void Bot::stop() {
     running = false;
 }
 
-std::string Bot::storeCallback(std::function<void()> callback) {
+std::string Bot::storeCallback(std::function<void()> callback, int expiryHours) {
     std::string key = std::to_string(callbackCounter_.fetch_add(1));
-    callbacks_.insert_or_assign(key, std::move(callback));
+    StoredCallback entry{std::move(callback), std::chrono::steady_clock::now(), std::chrono::hours(expiryHours)};
+    callbacks_.insert_or_assign(key, std::move(entry));
     return key;
 }
 
 std::optional<std::function<void()>> Bot::fetchCallback(const std::string& key) {
     std::optional<std::function<void()>> result;
     callbacks_.erase_if(key, [&result](auto& kv) {
-        result = std::move(kv.second);
+        result = std::move(kv.second.callback);
         return true;
     });
     return result;
+}
+
+void Bot::sweepExpiredCallbacks() {
+    auto now = std::chrono::steady_clock::now();
+    std::vector<std::string> expired;
+    callbacks_.for_each([&](auto& kv) {
+        if ((now - kv.second.storedAt) >= kv.second.expiry) {
+            expired.push_back(kv.first);
+        }
+    });
+    for (const auto& key : expired) {
+        callbacks_.erase(key);
+    }
 }
 
 void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
