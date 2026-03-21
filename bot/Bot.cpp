@@ -191,6 +191,20 @@ void Bot::answerCallbackQuery(const std::string& callbackQueryId, const std::str
     }
 }
 
+Chat Bot::getChat(long long chatId) {
+    std::string response = makeRequest("getChat", "chat_id=" + std::to_string(chatId));
+    Chat chat{};
+    try {
+        auto jsonResponse = json::parse(response);
+        if (jsonResponse.contains("ok") && jsonResponse["ok"].get<bool>() && jsonResponse.contains("result")) {
+            jsonResponse["result"].get_to(chat);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "JSON parse error in getChat: " << e.what() << std::endl;
+    }
+    return chat;
+}
+
 std::string Bot::makeRequest(const std::string& endpoint, const std::string& params) {
     CURL* curl;
     CURLcode res;

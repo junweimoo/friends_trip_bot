@@ -11,6 +11,7 @@ using json = nlohmann::json;
 
 struct Chat {
     long long id;
+    std::string title;
 };
 
 struct User {
@@ -70,6 +71,9 @@ inline void to_json(json& j, const InlineKeyboardMarkup& k) {
 
 inline void from_json(const json& j, Chat& c) {
     j.at("id").get_to(c.id);
+    if (j.contains("title")) {
+        j.at("title").get_to(c.title);
+    }
 }
 
 inline void from_json(const json& j, User& u) {

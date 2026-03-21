@@ -39,16 +39,18 @@ bool TripsConversation::isClosed() const {
 void TripsConversation::sendTripList(bool edit) {
     std::stringstream ss;
     if (allTrips_.empty()) {
-        ss << "No trips yet — create one to get started:";
+        ss << "No trips yet — create one to get started.";
     } else if (allTrips_.size() >= 8) {
-        ss << "Select a trip to set it as active (limit of 8 reached):";
+        ss << "Select a trip to set it as active (limit of 8 reached).";
     } else {
-        ss << "Select a trip or create a new one:";
+        ss << "Select a trip or create a new one.";
     }
 
-    ss << "\n\nRegistered users: ";
+    ss << "\n\nRegistered users (" << users_.size() << "):\n";
     for (size_t i = 0; i < users_.size(); ++i) {
-        if (i > 0) ss << ", ";
+        if (i > 0) {
+            ss << ", ";
+        }
         ss << users_[i].name;
     }
 

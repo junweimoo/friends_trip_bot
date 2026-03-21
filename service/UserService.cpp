@@ -11,14 +11,20 @@ bool UserService::registerUser(const User& user) {
     button.text = "Register";
     button.url = "https://t.me/" + botUsername + "?start=register" + std::to_string(user.chat_id);
     keyboard.inline_keyboard.push_back({button});
-    bot_.sendMessage(user.chat_id, "Tap on the Register button to register yourself in this trip.", &keyboard);
+    bot_.sendMessage(user.chat_id,
+        "Tap on the Register button to register yourself in this trip.\n"
+        "Check registered users with /trips.",
+        &keyboard);
     return true;
 }
 
 bool UserService::completeRegistration(const User& user) {
     bool success = userRepository_.registerUserWithDefaultTrip(user);
     if (success) {
-        bot_.sendMessage(user.user_id, "Successfully registered!");
+        bot::Chat chat = bot_.getChat(user.chat_id);
+        std::string chatName = chat.title.empty() ? "the chat" : chat.title;
+        bot_.sendMessage(user.user_id, "Successfully registered in " + chatName + "!");
+        bot_.sendMessage(user.chat_id, user.name + " joined the trip!");
     } else {
         bot_.sendMessage(user.user_id, "An error occurred during registration. Please try again later.");
     }
