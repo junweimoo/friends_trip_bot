@@ -8,6 +8,7 @@
 #include <cmath>
 #include <algorithm>
 #include <set>
+#include <map>
 
 SimplifyPaymentsConversation::SimplifyPaymentsConversation(long long chat_id, long long thread_id, long long user_id,
     bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo)
@@ -156,7 +157,7 @@ void SimplifyPaymentsConversation::handleExchangeRateInput(const bot::Update& up
 
     // Edit the prompt message to show confirmed rate
     std::stringstream confirmed;
-    confirmed << "✅ 1 " << foreign << " = " << std::fixed << rate << " " << targetCurrency_;
+    confirmed << "✅ 1 " << foreign << " = " << std::fixed << std::setprecision(12) << rate << " " << targetCurrency_;
     if (active_message_id_ != 0) {
         bot_.editMessage(chat_id, active_message_id_, confirmed.str());
     }
@@ -179,7 +180,7 @@ void SimplifyPaymentsConversation::computeAndDisplayResults() {
         }
     }
 
-    static constexpr size_t MIN_TRANSACTIONS_THRESHOLD = 15;
+    static constexpr size_t MIN_TRANSACTIONS_THRESHOLD = 0;
     std::unique_ptr<DebtSimplifier> simplifier;
     if (participants.size() <= MIN_TRANSACTIONS_THRESHOLD) {
         simplifier = std::make_unique<MinTransactionsSimplifier>();
@@ -190,20 +191,42 @@ void SimplifyPaymentsConversation::computeAndDisplayResults() {
     auto simplifiedPayments = simplifier->simplifyDebts(paymentGroups_, exchangeRates_, targetCurrency_);
 
     std::stringstream ss;
-    ss << "<b>Simplified Payments (" << targetCurrency_ << ")</b>\n";
-    ss << "<b>Trip: " << trip_.name << "</b>\n\n";
+    ss << "💰 <b>Simplified Payments (" << targetCurrency_ << ")</b>\n";
+    ss << "🧳 <b>Trip: " << trip_.name << "</b>\n\n";
 
     if (simplifiedPayments.empty()) {
-        ss << "All balances are settled! No payments needed.";
+        ss << "✅ All balances are settled! No payments needed.";
     } else {
         for (const auto& payment : simplifiedPayments) {
-            ss << users_[payment.from_user_id].name << " pays "
-               << users_[payment.to_user_id].name << " "
-               << payment.amount.toHumanReadable() << "\n";
+            ss << "➡️ <b>" << users_[payment.from_user_id].name << "</b> pays "
+               << "<b>" << users_[payment.to_user_id].name << "</b>: "
+               << "<b>" << payment.amount.toHumanReadable() << "</b>\n";
         }
+        ss << "\n✅ <b>" << simplifiedPayments.size() << "</b> transaction"
+           << (simplifiedPayments.size() > 1 ? "s" : "") << " to settle all debts"
+           << "\n\n📬 DMs have been sent to users who owe money.";
     }
 
     bot_.sendMessage(chat_id, ss.str(), nullptr, "HTML");
+
+    // Send private messages to each debtor with their payment list
+    if (!simplifiedPayments.empty()) {
+        std::map<long long, std::vector<const SimplifiedPayment*>> paymentsByDebtor;
+        for (const auto& payment : simplifiedPayments) {
+            paymentsByDebtor[payment.from_user_id].push_back(&payment);
+        }
+
+        for (const auto& [debtorId, payments] : paymentsByDebtor) {
+            std::stringstream dm;
+            dm << "💰 <b>Your payments for trip: " << trip_.name << "</b>\n\n";
+            for (const auto* payment : payments) {
+                dm << "➡️ Pay <b>" << users_[payment->to_user_id].name << "</b>: "
+                   << "<b>" << payment->amount.toHumanReadable() << "</b>\n";
+            }
+            bot_.sendMessage(debtorId, dm.str(), nullptr, "HTML");
+        }
+    }
+
     closeConversation();
 }
 

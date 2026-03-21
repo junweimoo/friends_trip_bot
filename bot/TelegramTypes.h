@@ -22,6 +22,7 @@ struct User {
 struct InlineKeyboardButton {
     std::string text;
     std::string callback_data;
+    std::string url;
 };
 
 struct InlineKeyboardMarkup {
@@ -56,7 +57,11 @@ struct GetUpdatesResponse {
 // JSON Serialization/Deserialization Logic
 
 inline void to_json(json& j, const InlineKeyboardButton& b) {
-    j = json{{"text", b.text}, {"callback_data", b.callback_data}};
+    if (!b.url.empty()) {
+        j = json{{"text", b.text}, {"url", b.url}};
+    } else {
+        j = json{{"text", b.text}, {"callback_data", b.callback_data}};
+    }
 }
 
 inline void to_json(json& j, const InlineKeyboardMarkup& k) {

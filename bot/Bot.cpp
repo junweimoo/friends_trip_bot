@@ -29,6 +29,14 @@ Bot::~Bot() {
     curl_global_cleanup();
 }
 
+void Bot::setUsername(std::string u) {
+    username = std::move(u);
+}
+
+const std::string& Bot::getBotUsername() const {
+    return username;
+}
+
 void Bot::start() {
     running = true;
     std::cout << "Bot started..." << std::endl;

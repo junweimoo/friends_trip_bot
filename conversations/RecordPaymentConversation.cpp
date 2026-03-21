@@ -277,7 +277,7 @@ void RecordPaymentConversation::handlePayer(const bot::Update& update) {
     keyboard.inline_keyboard.push_back({{"Single Recipient", createCallbackData(State::Recipient, "single_recipient")}});
 
     currentState_ = State::Recipient;
-    active_message_id = bot_.sendMessage(chat_id,  "Who is this for?", &keyboard);
+    active_message_id = bot_.sendMessage(chat_id,  "How do you want to split this amount?", &keyboard);
 }
 
 void RecordPaymentConversation::handleRecipient(const bot::Update& update) {

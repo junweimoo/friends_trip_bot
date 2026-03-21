@@ -5,11 +5,22 @@ UserService::UserService(UserRepository& userRepository, bot::Bot& bot)
     : userRepository_(userRepository), bot_(bot) {}
 
 bool UserService::registerUser(const User& user) {
+    const std::string& botUsername = bot_.getBotUsername();
+    bot::InlineKeyboardMarkup keyboard;
+    bot::InlineKeyboardButton button;
+    button.text = "Register";
+    button.url = "https://t.me/" + botUsername + "?start=register" + std::to_string(user.chat_id);
+    keyboard.inline_keyboard.push_back({button});
+    bot_.sendMessage(user.chat_id, "Tap on the Register button to register yourself in this trip.", &keyboard);
+    return true;
+}
+
+bool UserService::completeRegistration(const User& user) {
     bool success = userRepository_.registerUserWithDefaultTrip(user);
     if (success) {
-        bot_.sendMessage(user.chat_id, "Successfully registered!");
+        bot_.sendMessage(user.user_id, "Successfully registered!");
     } else {
-        bot_.sendMessage(user.chat_id, "An error occured during registration.");
+        bot_.sendMessage(user.user_id, "An error occurred during registration. Please try again later.");
     }
     return success;
 }

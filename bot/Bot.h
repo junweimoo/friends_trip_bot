@@ -30,6 +30,9 @@ public:
     void start();
     void stop();
 
+    void setUsername(std::string username);
+    const std::string& getBotUsername() const;
+
     template<typename F>
     void registerCommandHandler(std::string command, F&& handler) {
         commandHandlers.insert_or_assign(std::move(command), std::forward<F>(handler));
@@ -53,6 +56,7 @@ public:
 
 private:
     std::string token;
+    std::string username;
     std::string baseUrl;
     std::atomic<bool> running;
     long long lastUpdateId;

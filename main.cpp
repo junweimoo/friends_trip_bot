@@ -70,6 +70,9 @@ int main() {
 
     // Bot
     bot::Bot myBot(tokenEnv);
+    if (const char* botUsername = std::getenv("TELEGRAM_BOT_USERNAME")) {
+        myBot.setUsername(botUsername);
+    }
 
     // Services
     auto userService    = std::make_unique<UserService>(*userRepo, myBot);

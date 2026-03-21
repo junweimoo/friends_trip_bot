@@ -11,6 +11,7 @@ public:
     explicit UserService(UserRepository& userRepository, bot::Bot& bot);
 
     bool registerUser(const User& user);
+    bool completeRegistration(const User& user);
     std::optional<User> getUserDetails(long long userId, long long chatId, long long threadId);
     bool updateUserName(const User& user);
     bool removeUser(long long userId, long long chatId, long long threadId);
