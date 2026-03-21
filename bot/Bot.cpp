@@ -16,8 +16,8 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
     return size * nmemb;
 }
 
-Bot::Bot(const std::string& token)
-    : token(token),
+Bot::Bot(const std::string& token, Scheduler& scheduler)
+    : token(token), scheduler(scheduler),
       baseUrl("https://api.telegram.org/bot" + token + "/"),
       running(false),
       lastUpdateId(0) {

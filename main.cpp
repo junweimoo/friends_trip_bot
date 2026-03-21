@@ -13,6 +13,7 @@
 #include "repository/TripRepository.h"
 #include "service/UserService.h"
 #include "service/PaymentService.h"
+#include "bot/Scheduler.h"
 
 void loadEnv(const std::string& filename) {
     std::ifstream file(filename);
@@ -68,8 +69,11 @@ int main() {
     auto paymentRepo = std::make_unique<PaymentRepository>(*db);
     auto tripRepo    = std::make_unique<TripRepository>(*db);
 
+    // Scheduler
+    bot::Scheduler scheduler;
+
     // Bot
-    bot::Bot myBot(tokenEnv);
+    bot::Bot myBot(tokenEnv, scheduler);
     if (const char* botUsername = std::getenv("TELEGRAM_BOT_USERNAME")) {
         myBot.setUsername(botUsername);
     }
@@ -83,6 +87,9 @@ int main() {
     handlers::Repositories repos{*userRepo, *tripRepo, *paymentRepo};
     handlers::registerHandlers(myBot, services, repos);
 
+    // Start bot and scheduler
     myBot.start();
+    scheduler.startWorker();
+
     return 0;
 }

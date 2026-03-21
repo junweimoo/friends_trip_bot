@@ -15,6 +15,7 @@
 
 #include "Conversation.h"
 #include "InternalTypes.h"
+#include "Scheduler.h"
 #include "TelegramTypes.h"
 
 namespace bot {
@@ -25,7 +26,7 @@ using CallbackHandler = std::function<void(const CallbackQuery&)>;
 
 class Bot {
 public:
-    explicit Bot(const std::string& token);
+    explicit Bot(const std::string& token, Scheduler& scheduler);
     ~Bot();
 
     void start();
@@ -65,6 +66,8 @@ private:
     std::string baseUrl;
     std::atomic<bool> running;
     long long lastUpdateId;
+
+    Scheduler& scheduler;
 
     std::map<std::string, CommandHandler> commandHandlers;
     TextHandler textHandler;
