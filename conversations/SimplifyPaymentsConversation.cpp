@@ -111,12 +111,16 @@ void SimplifyPaymentsConversation::handleCurrencySelection(const bot::Update& up
     }
     foreignCurrencies_.assign(seen.begin(), seen.end());
 
+    std::stringstream confirmed;
+    confirmed << "✅ Target currency: " << targetCurrency_;
+    bot_.editMessage(chat_id, active_message_id_, confirmed.str());
+
     if (foreignCurrencies_.empty()) {
         computeAndDisplayResults();
     } else {
         currentForeignCurrencyIndex_ = 0;
         currentState_ = State::CollectingExchangeRate;
-        sendExchangeRatePrompt(true);
+        sendExchangeRatePrompt(false);
     }
 }
 

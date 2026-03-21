@@ -91,7 +91,7 @@ void ListPaymentsConversation::sendCurrentPage(bool editMessage) {
             ss << "👤 <b>" << users[userId].name << ":</b>\n";
             for (const auto& [currency, amount] : balances) {
                 std::string color = (amount >= 0) ? "🟢" : "🔴";
-                ss << "     " << color << " " << MoneyAmount(currency, amount).toHumanReadable() << "\n";
+                ss << color << " " << MoneyAmount(currency, amount).toHumanReadable() << "\n";
             }
         }
     }

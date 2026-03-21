@@ -6,6 +6,7 @@
 #include "../repository/TripRepository.h"
 #include "../repository/UserRepository.h"
 #include <unordered_map>
+#include <functional>
 #include <string>
 
 class RecordPaymentConversation : public bot::Conversation {
@@ -39,6 +40,10 @@ private:
     void handleManualRecipient(const bot::Update& update);
     void handleManualAmount(const bot::Update& update);
 
+    void appendPaginatedUserButtons(bot::InlineKeyboardMarkup& keyboard, State targetState,
+        const std::function<std::string(long long uid, const User& user)>& buttonTextFn);
+
+    void sendPayerSelection(bool editMessage);
     void sendSingleRecipients(bool editMessage);
     void sendEqualSplitRecipients(bool editMessage);
     void sendManualRecipients(bool editMessage);
@@ -62,6 +67,7 @@ private:
     std::unordered_map<long long, long long> allocatedAmounts;
     double pendingRawAmount_ = 0.0;
     std::string pendingCurrency_;
+    int page_ = 0;
     long long current_recipient_id;
 
     PaymentGroup paymentGroup;

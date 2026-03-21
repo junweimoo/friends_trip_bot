@@ -191,14 +191,57 @@ void RecordPaymentConversation::handleAmount(const bot::Update& update) {
     editedMsg << "✅ Amount: " << paymentGroup.total_amount.toHumanReadable();
     bot_.editMessage(chat_id, active_message_id, editedMsg.str());
 
-    // Ask for Payer
-    bot::InlineKeyboardMarkup keyboard;
-    for (const auto& [uid, user] : users) {
-        keyboard.inline_keyboard.push_back({{user.name, createCallbackData(State::Payer, std::to_string(uid))}});
+    // Ask for Payer (paginated if >10 users)
+    page_ = 0;
+    currentState_ = State::Payer;
+    sendPayerSelection(false);
+}
+
+void RecordPaymentConversation::appendPaginatedUserButtons(
+    bot::InlineKeyboardMarkup& keyboard, State targetState,
+    const std::function<std::string(long long, const User&)>& buttonTextFn) {
+
+    std::vector<std::pair<long long, User>> userList(users.begin(), users.end());
+    constexpr int pageSize = 10;
+    int totalUsers = static_cast<int>(userList.size());
+    int totalPages = std::max(1, (totalUsers + pageSize - 1) / pageSize);
+
+    if (page_ < 0) page_ = 0;
+    if (page_ >= totalPages) page_ = totalPages - 1;
+
+    int start = page_ * pageSize;
+    int end = std::min(start + pageSize, totalUsers);
+
+    for (int i = start; i < end; ++i) {
+        const auto& [uid, user] = userList[i];
+        keyboard.inline_keyboard.push_back(
+            {{buttonTextFn(uid, user), createCallbackData(targetState, std::to_string(uid))}});
     }
 
-    currentState_ = State::Payer;
-    active_message_id = bot_.sendMessage(chat_id, "Who paid?", &keyboard);
+    if (totalPages > 1) {
+        std::vector<bot::InlineKeyboardButton> navRow;
+        if (page_ > 0) {
+            navRow.push_back({"⬅️ Previous", createCallbackData(targetState, "page_prev")});
+        }
+        navRow.push_back({std::to_string(page_ + 1) + "/" + std::to_string(totalPages),
+                          createCallbackData(targetState, "noop")});
+        if (page_ < totalPages - 1) {
+            navRow.push_back({"Next ➡️", createCallbackData(targetState, "page_next")});
+        }
+        keyboard.inline_keyboard.push_back(navRow);
+    }
+}
+
+void RecordPaymentConversation::sendPayerSelection(bool editMessage) {
+    bot::InlineKeyboardMarkup keyboard;
+    appendPaginatedUserButtons(keyboard, State::Payer,
+        [](long long, const User& user) { return user.name; });
+
+    if (editMessage) {
+        bot_.editMessage(chat_id, active_message_id, "Who paid?", &keyboard);
+    } else {
+        active_message_id = bot_.sendMessage(chat_id, "Who paid?", &keyboard);
+    }
 }
 
 void RecordPaymentConversation::handlePayer(const bot::Update& update) {
@@ -208,6 +251,11 @@ void RecordPaymentConversation::handlePayer(const bot::Update& update) {
     State targetState;
     std::string data;
     if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
+
+    // Handle pagination
+    if (data == "page_next") { ++page_; sendPayerSelection(true); return; }
+    if (data == "page_prev") { --page_; sendPayerSelection(true); return; }
+    if (data == "noop") return;
 
     try {
         paymentGroup.payer_user_id = std::stoll(data);
@@ -238,6 +286,7 @@ void RecordPaymentConversation::handleRecipient(const bot::Update& update) {
     std::string data;
     if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
 
+    page_ = 0;
     if (data == "split_manually") {
         for (const auto& [uid, user] : users) {
             allocatedAmounts[uid] = 0;
@@ -261,13 +310,11 @@ void RecordPaymentConversation::handleRecipient(const bot::Update& update) {
 }
 
 void RecordPaymentConversation::sendSingleRecipients(bool editMessage) {
-    std::string text = "Select the recipient:";
-
     bot::InlineKeyboardMarkup keyboard;
-    for (const auto& [uid, user] : users) {
-        keyboard.inline_keyboard.push_back({{user.name, createCallbackData(State::SingleRecipient, std::to_string(uid))}});
-    }
+    appendPaginatedUserButtons(keyboard, State::SingleRecipient,
+        [](long long, const User& user) { return user.name; });
 
+    std::string text = "Select the recipient:";
     if (editMessage) {
         bot_.editMessage(chat_id, active_message_id, text, &keyboard);
     } else {
@@ -282,6 +329,11 @@ void RecordPaymentConversation::handleSingleRecipient(const bot::Update& update)
     State targetState;
     std::string data;
     if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
+
+    // Handle pagination
+    if (data == "page_next") { ++page_; sendSingleRecipients(true); return; }
+    if (data == "page_prev") { --page_; sendSingleRecipients(true); return; }
+    if (data == "noop") return;
 
     long long recipientId;
     try {
@@ -370,15 +422,13 @@ void RecordPaymentConversation::sendEqualSplitRecipients(bool editMessage) {
     }
     keyboard.inline_keyboard.push_back({{"Select all", createCallbackData(State::EqualSplit, "select_all")}});
     keyboard.inline_keyboard.push_back({{"Unselect all", createCallbackData(State::EqualSplit, "unselect_all")}});
-    for (const auto& [uid, user] : users) {
-        std::stringstream btnText;
-        if (allocatedAmounts.find(uid) != allocatedAmounts.end()) {
-            btnText << "✅ " <<  user.name;
-        } else {
-            btnText << user.name;
-        }
-        keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(State::EqualSplit, std::to_string(uid))}});
-    }
+    appendPaginatedUserButtons(keyboard, State::EqualSplit,
+        [this](long long uid, const User& user) {
+            if (allocatedAmounts.find(uid) != allocatedAmounts.end()) {
+                return "✅ " + user.name;
+            }
+            return user.name;
+        });
 
     if (editMessage) {
         bot_.editMessage(chat_id, active_message_id, text, &keyboard);
@@ -394,6 +444,11 @@ void RecordPaymentConversation::handleEqualSplitRecipients(const bot::Update& up
     State targetState;
     std::string data;
     if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
+
+    // Handle pagination
+    if (data == "page_next") { ++page_; sendEqualSplitRecipients(true); return; }
+    if (data == "page_prev") { --page_; sendEqualSplitRecipients(true); return; }
+    if (data == "noop") return;
 
     if (data == "done") {
         completeConversation();
@@ -452,11 +507,12 @@ void RecordPaymentConversation::sendManualRecipients(bool editMessage) {
         keyboard.inline_keyboard.push_back({{"Done", createCallbackData(State::ManualRecipient, "done")}});
     }
 
-    for (const auto& [uid, user] : users) {
-        std::stringstream btnText;
-        btnText << user.name << " (" << MoneyAmount(currency, allocatedAmounts[uid]).toHumanReadable() << ")";
-        keyboard.inline_keyboard.push_back({{btnText.str(), createCallbackData(State::ManualRecipient, std::to_string(uid))}});
-    }
+    appendPaginatedUserButtons(keyboard, State::ManualRecipient,
+        [this, &currency](long long uid, const User& user) {
+            std::stringstream btnText;
+            btnText << user.name << " (" << MoneyAmount(currency, allocatedAmounts[uid]).toHumanReadable() << ")";
+            return btnText.str();
+        });
 
     if (editMessage) {
         bot_.editMessage(chat_id, active_message_id, text, &keyboard);
@@ -472,6 +528,11 @@ void RecordPaymentConversation::handleManualRecipient(const bot::Update& update)
     State targetState;
     std::string data;
     if (!parseCallbackData(update.callback_query.data, targetState, data) || targetState != currentState_) return;
+
+    // Handle pagination
+    if (data == "page_next") { ++page_; sendManualRecipients(true); return; }
+    if (data == "page_prev") { --page_; sendManualRecipients(true); return; }
+    if (data == "noop") return;
 
     if (data == "done") {
         // Check if total allocated matches total amount
@@ -564,6 +625,10 @@ void RecordPaymentConversation::completeConversation() {
 }
 
 void RecordPaymentConversation::cancelConversation() {
-    bot_.sendMessage(chat_id, "Record cancelled.");
+    if (active_message_id != 0) {
+        bot_.editMessage(chat_id, active_message_id, "Record cancelled.");
+    } else {
+        bot_.sendMessage(chat_id, "Record cancelled.");
+    }
     closed = true;
 }

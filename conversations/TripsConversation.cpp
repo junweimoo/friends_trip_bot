@@ -35,19 +35,21 @@ bool TripsConversation::isClosed() const {
 
 void TripsConversation::sendTripList(bool edit) {
     std::stringstream ss;
-    ss << "Registered users: ";
+    if (allTrips_.empty()) {
+        ss << "No trips yet — create one to get started:";
+    } else if (allTrips_.size() >= 8) {
+        ss << "Select a trip to set it as active (limit of 8 reached):";
+    } else {
+        ss << "Select a trip or create a new one:";
+    }
+
+    ss << "\n\nRegistered users: ";
     for (size_t i = 0; i < users_.size(); ++i) {
         if (i > 0) ss << ", ";
         ss << users_[i].name;
     }
-    ss << "\n\nPlease select a trip or create a new one:";
 
     bot::InlineKeyboardMarkup keyboard;
-    keyboard.inline_keyboard.push_back({{"➕ New Trip", "new_trip"}});
-
-    if (allTrips_.size() >= 2) {
-        keyboard.inline_keyboard.push_back({{"🗑️ Delete current trip", "delete_trip"}});
-    }
 
     for (const auto& trip : allTrips_) {
         std::string buttonText = trip.name;
@@ -55,6 +57,14 @@ void TripsConversation::sendTripList(bool edit) {
             buttonText = "✅ " + buttonText;
         }
         keyboard.inline_keyboard.push_back({{buttonText, "trip_" + std::to_string(trip.trip_id)}});
+    }
+
+    if (allTrips_.size() >= 2) {
+        keyboard.inline_keyboard.push_back({{"🗑️ Delete selected trip", "delete_trip"}});
+    }
+
+    if (allTrips_.size() < 8) {
+        keyboard.inline_keyboard.push_back({{"➕ New Trip", "new_trip"}});
     }
 
     keyboard.inline_keyboard.push_back({{"Close", "close"}});
