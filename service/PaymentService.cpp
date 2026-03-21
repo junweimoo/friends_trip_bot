@@ -4,9 +4,12 @@
 
 #include "PaymentService.h"
 #include <iostream>
+#include <sstream>
 
-PaymentService::PaymentService(PaymentRepository& paymentRepository, TripRepository& tripRepository, bot::Bot& bot)
-    : paymentRepository_(paymentRepository), tripRepository_(tripRepository), bot_(bot) {}
+PaymentService::PaymentService(PaymentRepository& paymentRepository, TripRepository& tripRepository,
+                               UserRepository& userRepository, bot::Bot& bot)
+    : paymentRepository_(paymentRepository), tripRepository_(tripRepository),
+      userRepository_(userRepository), bot_(bot) {}
 
 std::optional<PaymentGroup> PaymentService::undoLastPaymentInActiveTrip(long long chatId, long long threadId) {
     auto activeTrip = tripRepository_.getActiveTrip(chatId, threadId);
@@ -21,4 +24,17 @@ std::optional<PaymentGroup> PaymentService::undoLastPaymentInActiveTrip(long lon
         bot_.sendMessage(chatId, "There are no payments in this group yet.");
     }
     return deleted;
+}
+
+void PaymentService::logSimplifiedPayment(const PaymentGroup& paymentGroup, const std::string& fromName,
+                                           const std::string& toName, long long groupChatId) {
+    if (!paymentRepository_.createPaymentGroup(paymentGroup)) {
+        std::cerr << "Failed to log simplified payment for trip " << paymentGroup.trip_id << std::endl;
+        return;
+    }
+
+    std::stringstream groupMsg;
+    groupMsg << "\xf0\x9f\x92\xb8 <b>" << fromName << "</b> paid <b>" << toName
+             << "</b>: <b>" << paymentGroup.total_amount.toHumanReadable() << "</b>";
+    bot_.sendMessage(groupChatId, groupMsg.str(), nullptr, "HTML");
 }

@@ -10,10 +10,13 @@
 #include <vector>
 #include <string>
 
+class PaymentService;
+
 class SimplifyPaymentsConversation : public bot::Conversation {
 public:
     SimplifyPaymentsConversation(long long chat_id, long long thread_id, long long user_id,
-        bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo);
+        bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo,
+        PaymentService& paymentService);
     ~SimplifyPaymentsConversation() override;
 
     void handleUpdate(const bot::Update& update) override;
@@ -43,6 +46,7 @@ private:
     UserRepository& userRepo_;
     TripRepository& tripRepo_;
     PaymentRepository& payRepo_;
+    PaymentService& paymentService_;
 
     std::string targetCurrency_;
     std::vector<std::string> foreignCurrencies_;

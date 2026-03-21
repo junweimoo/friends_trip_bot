@@ -2,6 +2,7 @@
 #include "../algorithm/GreedyDebtSimplifier.h"
 #include "../algorithm/MinTransactionsSimplifier.h"
 #include "../bot/Bot.h"
+#include "../service/PaymentService.h"
 #include <memory>
 #include <sstream>
 #include <iomanip>
@@ -11,10 +12,12 @@
 #include <map>
 
 SimplifyPaymentsConversation::SimplifyPaymentsConversation(long long chat_id, long long thread_id, long long user_id,
-    bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo)
+    bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo,
+    PaymentService& paymentService)
     : Conversation(chat_id, thread_id, user_id, bot),
       currentState_(State::SelectingCurrency), closed_(false), active_message_id_(0),
-      userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo), currentForeignCurrencyIndex_(0) {
+      userRepo_(userRepo), tripRepo_(tripRepo), payRepo_(payRepo), paymentService_(paymentService),
+      currentForeignCurrencyIndex_(0) {
 
     auto activeTrip = tripRepo_.getActiveTrip(chat_id, thread_id);
     if (activeTrip.has_value()) {
@@ -204,26 +207,51 @@ void SimplifyPaymentsConversation::computeAndDisplayResults() {
         }
         ss << "\n✅ <b>" << simplifiedPayments.size() << "</b> transaction"
            << (simplifiedPayments.size() > 1 ? "s" : "") << " to settle all debts"
-           << "\n\n📬 DMs have been sent to users who owe money.";
+           << "\n\n📬 DMs have been sent to users who owe money";
     }
 
     bot_.sendMessage(chat_id, ss.str(), nullptr, "HTML");
 
-    // Send private messages to each debtor with their payment list
+    // Send a private message per payment with a "Log Payment" button
     if (!simplifiedPayments.empty()) {
-        std::map<long long, std::vector<const SimplifiedPayment*>> paymentsByDebtor;
         for (const auto& payment : simplifiedPayments) {
-            paymentsByDebtor[payment.from_user_id].push_back(&payment);
-        }
-
-        for (const auto& [debtorId, payments] : paymentsByDebtor) {
             std::stringstream dm;
-            dm << "💰 <b>Your payments for trip: " << trip_.name << "</b>\n\n";
-            for (const auto* payment : payments) {
-                dm << "➡️ Pay <b>" << users_[payment->to_user_id].name << "</b>: "
-                   << "<b>" << payment->amount.toHumanReadable() << "</b>\n";
-            }
-            bot_.sendMessage(debtorId, dm.str(), nullptr, "HTML");
+            dm << "💰 <b>Trip: " << trip_.name << "</b>\n\n"
+               << "➡️ Pay <b>" << users_[payment.to_user_id].name << "</b>: "
+               << "<b>" << payment.amount.toHumanReadable() << "</b>";
+
+            // Build PaymentGroup with pre-stored parameters
+            PaymentGroup paymentGroup;
+            paymentGroup.payment_group_id = 0;
+            paymentGroup.trip_id = trip_.trip_id;
+            paymentGroup.name = "Simplified Repayment";
+            paymentGroup.total_amount = payment.amount;
+            paymentGroup.payer_user_id = payment.from_user_id;
+            paymentGroup.gmt_created = {};
+
+            PaymentRecord record;
+            record.payment_record_id = 0;
+            record.payment_group_id = 0;
+            record.trip_id = trip_.trip_id;
+            record.amount = payment.amount;
+            record.from_user_id = payment.from_user_id;
+            record.to_user_id = payment.to_user_id;
+            record.gmt_created = {};
+            paymentGroup.records.push_back(record);
+
+            std::string fromName = users_[payment.from_user_id].name;
+            std::string toName = users_[payment.to_user_id].name;
+
+            std::string key = bot_.storeCallback(
+                [&paymentService = paymentService_, paymentGroup, fromName, toName, groupChatId = chat_id]() {
+                    paymentService.logSimplifiedPayment(paymentGroup, fromName, toName, groupChatId);
+                });
+
+            bot::InlineKeyboardMarkup keyboard;
+            keyboard.inline_keyboard.push_back(
+                {{"\xe2\x9c\x85 Log Payment", key}});
+
+            bot_.sendMessage(payment.from_user_id, dm.str(), &keyboard, "HTML", "lp");
         }
     }
 

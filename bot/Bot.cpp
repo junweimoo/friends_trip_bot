@@ -54,6 +54,21 @@ void Bot::stop() {
     running = false;
 }
 
+std::string Bot::storeCallback(std::function<void()> callback) {
+    std::string key = std::to_string(callbackCounter_.fetch_add(1));
+    callbacks_.insert_or_assign(key, std::move(callback));
+    return key;
+}
+
+std::optional<std::function<void()>> Bot::fetchCallback(const std::string& key) {
+    std::optional<std::function<void()>> result;
+    callbacks_.erase_if(key, [&result](auto& kv) {
+        result = std::move(kv.second);
+        return true;
+    });
+    return result;
+}
+
 void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
     if (!conversation) return;
     long long chatId = conversation->getChatId();
@@ -65,7 +80,7 @@ void Bot::registerConversation(std::unique_ptr<Conversation> conversation) {
     conversations.insert_or_assign({chatId, userId}, entry);
 }
 
-long long Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard, const std::string& parseMode) {
+long long Bot::sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard, const std::string& parseMode, const std::string& callbackType) {
     CURL *curl = curl_easy_init();
     long long messageId = -1;
     if(curl) {
@@ -79,7 +94,17 @@ long long Bot::sendMessage(long long chatId, const std::string& text, const Inli
             }
 
             if (keyboard) {
-                json j = *keyboard;
+                InlineKeyboardMarkup kb = *keyboard;
+                if (!callbackType.empty()) {
+                    for (auto& row : kb.inline_keyboard) {
+                        for (auto& btn : row) {
+                            if (btn.url.empty()) {
+                                btn.callback_data = callbackType + "|" + btn.callback_data;
+                            }
+                        }
+                    }
+                }
+                json j = kb;
                 std::string jsonStr = j.dump();
                 char *encodedKeyboard = curl_easy_escape(curl, jsonStr.c_str(), jsonStr.length());
                 if (encodedKeyboard) {
@@ -339,18 +364,25 @@ void Bot::poll() {
             }
         }
 
-        // Handle Callback Queries
+        // Handle Callback Queries — de-encapsulate type and route to typed handler
         if (!isCommand && !isConversation && !update.callback_query.id.empty()) {
-            CallbackQuery query;
-            query.update_id = update.update_id;
-            query.chat_id = update.callback_query.message.chat.id;
-            query.message_id = update.callback_query.message.message_id;
-            query.sender_id = update.callback_query.from.id;
-            query.sender_name = update.callback_query.from.first_name;
-            query.data = update.callback_query.data;
-            if (callbackHandler) {
-                // Dispatch callback
-                std::thread(callbackHandler, query).detach();
+            const std::string& rawData = update.callback_query.data;
+            size_t sep = rawData.find('|');
+            if (sep != std::string::npos) {
+                std::string type = rawData.substr(0, sep);
+                auto it = callbackHandlers.find(type);
+                if (it != callbackHandlers.end()) {
+                    CallbackQuery query;
+                    query.id = update.callback_query.id;
+                    query.update_id = update.update_id;
+                    query.chat_id = update.callback_query.message.chat.id;
+                    query.message_id = update.callback_query.message.message_id;
+                    query.sender_id = update.callback_query.from.id;
+                    query.sender_name = update.callback_query.from.first_name;
+                    query.data = rawData.substr(sep + 1);
+                    query.message_text = update.callback_query.message.text;
+                    std::thread(it->second, query).detach();
+                }
             }
         }
     }

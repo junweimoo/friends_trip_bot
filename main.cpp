@@ -76,7 +76,7 @@ int main() {
 
     // Services
     auto userService    = std::make_unique<UserService>(*userRepo, myBot);
-    auto paymentService = std::make_unique<PaymentService>(*paymentRepo, *tripRepo, myBot);
+    auto paymentService = std::make_unique<PaymentService>(*paymentRepo, *tripRepo, *userRepo, myBot);
 
     // Register handlers and start
     handlers::Services services{*userService, *paymentService};

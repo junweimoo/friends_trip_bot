@@ -77,10 +77,10 @@ void registerHandlers(bot::Bot& bot, const Services& services, const Repositorie
     });
 
     // simplify payments handler
-    bot.registerCommandHandler("/simplify", [&bot, &repos](const bot::Message& msg) {
+    bot.registerCommandHandler("/simplify", [&bot, &repos, &paymentService = services.paymentService](const bot::Message& msg) {
         auto convo = std::make_unique<SimplifyPaymentsConversation>(
             msg.chat_id, 0, msg.sender_id,
-            bot, repos.userRepository, repos.tripRepository, repos.paymentRepository);
+            bot, repos.userRepository, repos.tripRepository, repos.paymentRepository, paymentService);
         bot.registerConversation(std::move(convo));
     });
 
@@ -94,6 +94,19 @@ void registerHandlers(bot::Bot& bot, const Services& services, const Repositorie
     // undo last payment handler
     bot.registerCommandHandler("/undo", [&paymentService = services.paymentService](const bot::Message& msg) {
         paymentService.undoLastPaymentInActiveTrip(msg.chat_id, 0);
+    });
+
+    // Log payment callback handler (from simplify DMs)
+    bot.registerCallbackHandler("lp", [&bot](const bot::CallbackQuery& query) {
+        auto callback = bot.fetchCallback(query.data);
+        if (callback) {
+            (*callback)();
+            bot.answerCallbackQuery(query.id, "Payment logged!");
+            bot.editMessage(query.chat_id, query.message_id,
+                query.message_text + "\n\n\xe2\x9c\x85 Paid", nullptr, "");
+        } else {
+            bot.answerCallbackQuery(query.id, "This button has expired.", true);
+        }
     });
 }
 

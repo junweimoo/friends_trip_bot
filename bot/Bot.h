@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <utility>
 
 #include <parallel_hashmap/phmap.h>
@@ -44,16 +45,19 @@ public:
     }
 
     template<typename F>
-    void registerCallbackHandler(F&& handler) {
-        callbackHandler = std::forward<F>(handler);
+    void registerCallbackHandler(std::string type, F&& handler) {
+        callbackHandlers.insert_or_assign(std::move(type), std::forward<F>(handler));
     }
 
     void registerConversation(std::unique_ptr<Conversation> conversation);
 
-    long long sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr, const std::string& parseMode = "");
+    long long sendMessage(long long chatId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr, const std::string& parseMode = "", const std::string& callbackType = "");
     void editMessage(long long chatId, long long messageId, const std::string& text, const InlineKeyboardMarkup* keyboard = nullptr, const std::string& parseMode = "");
     void answerCallbackQuery(const std::string& callbackQueryId, const std::string& text = "", bool showAlert = false);
     Chat getChat(long long chatId);
+
+    std::string storeCallback(std::function<void()> callback);
+    std::optional<std::function<void()>> fetchCallback(const std::string& key);
 
 private:
     std::string token;
@@ -64,7 +68,7 @@ private:
 
     std::map<std::string, CommandHandler> commandHandlers;
     TextHandler textHandler;
-    CallbackHandler callbackHandler;
+    std::map<std::string, CallbackHandler> callbackHandlers;
 
     struct ConversationEntry {
         std::mutex mutex;
@@ -85,6 +89,9 @@ private:
         std::shared_ptr<ConversationEntry>,
         PairHash
     > conversations;
+
+    std::atomic<uint64_t> callbackCounter_{0};
+    phmap::parallel_flat_hash_map<std::string, std::function<void()>> callbacks_;
 
     void poll();
     std::vector<Update> getUpdates();
