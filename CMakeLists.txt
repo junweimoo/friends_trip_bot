@@ -47,6 +47,7 @@ find_package(CURL REQUIRED)
 add_executable(friends_trip_bot
     main.cpp
     bot/Bot.cpp
+    bot/ThreadPool.cpp
     bot/Conversation.cpp
     database/DatabaseManager.cpp
     database/DatabaseSchema.cpp

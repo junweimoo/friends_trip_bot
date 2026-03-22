@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstdlib>
+#include <csignal>
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -14,6 +15,14 @@
 #include "service/UserService.h"
 #include "service/PaymentService.h"
 #include "bot/Scheduler.h"
+
+static bot::Bot* g_bot = nullptr;
+static bot::Scheduler* g_scheduler = nullptr;
+
+extern "C" void signalHandler(int) {
+    if (g_bot) g_bot->stop();
+    if (g_scheduler) g_scheduler->stop();
+}
 
 void loadEnv(const std::string& filename) {
     std::ifstream file(filename);
@@ -87,9 +96,15 @@ int main() {
     handlers::Repositories repos{*userRepo, *tripRepo, *paymentRepo};
     handlers::registerHandlers(myBot, services, repos);
 
-    // Start bot and scheduler
-    myBot.start();
+    // Signal handling for graceful shutdown
+    g_bot = &myBot;
+    g_scheduler = &scheduler;
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
+
+    // Start scheduler before bot (bot.start() blocks)
     scheduler.startWorker();
+    myBot.start();
 
     return 0;
 }

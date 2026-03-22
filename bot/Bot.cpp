@@ -1,10 +1,9 @@
 #include "Bot.h"
-#include <iostream>
 #include <thread>
 #include <chrono>
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
-#include <future>
+#include <spdlog/spdlog.h>
 
 namespace bot {
 
@@ -16,18 +15,23 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
     return size * nmemb;
 }
 
+static constexpr std::size_t kDefaultWorkers = 4;
+static constexpr std::size_t kDefaultQueueSize = 32;
+
 Bot::Bot(const std::string& token, Scheduler& scheduler)
     : token(token), scheduler(scheduler),
       baseUrl("https://api.telegram.org/bot" + token + "/"),
       running(false),
-      lastUpdateId(0) {
+      lastUpdateId(0),
+      threadPool_(kDefaultWorkers, kDefaultQueueSize) {
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
-    scheduler.registerTask([this] { sweepExpiredCallbacks(); }, true, 0, 0, 0);
+    scheduler.registerTask([this] { sweepExpiredCallbacks(); }, true, 00, 00, 00);
 }
 
 Bot::~Bot() {
     stop();
+    threadPool_.waitForDrain();
     curl_global_cleanup();
 }
 
@@ -41,12 +45,12 @@ const std::string& Bot::getBotUsername() const {
 
 void Bot::start() {
     running = true;
-    std::cout << "Bot started..." << std::endl;
+    spdlog::info("Bot started");
     while (running) {
         try {
             poll();
         } catch (const std::exception& e) {
-            std::cerr << "Error in bot loop: " << e.what() << std::endl;
+            spdlog::error("Error in bot loop: {}", e.what());
             std::this_thread::sleep_for(std::chrono::seconds(5));
         }
     }
@@ -54,6 +58,7 @@ void Bot::start() {
 
 void Bot::stop() {
     running = false;
+    threadPool_.shutdown();
 }
 
 std::string Bot::storeCallback(std::function<void()> callback, int expiryHours) {
@@ -82,6 +87,11 @@ void Bot::sweepExpiredCallbacks() {
     });
     for (const auto& key : expired) {
         callbacks_.erase(key);
+    }
+    if (!expired.empty()) {
+        spdlog::info("Swept {} expired callback(s)", expired.size());
+    } else {
+        spdlog::info("No expired callback(s)");
     }
 }
 
@@ -138,7 +148,7 @@ long long Bot::sendMessage(long long chatId, const std::string& text, const Inli
 
             CURLcode res = curl_easy_perform(curl);
             if(res != CURLE_OK) {
-                 fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+                 spdlog::error("curl_easy_perform() failed: {}", curl_easy_strerror(res));
             } else {
                 try {
                     auto jsonResponse = json::parse(responseBuffer);
@@ -148,7 +158,7 @@ long long Bot::sendMessage(long long chatId, const std::string& text, const Inli
                         }
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << "JSON parse error in sendMessage: " << e.what() << std::endl;
+                    spdlog::error("JSON parse error in sendMessage: {}", e.what());
                 }
             }
 
@@ -193,7 +203,7 @@ void Bot::editMessage(long long chatId, long long messageId, const std::string& 
 
             CURLcode res = curl_easy_perform(curl);
             if(res != CURLE_OK) {
-                 fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+                 spdlog::error("curl_easy_perform() failed: {}", curl_easy_strerror(res));
             }
 
             curl_free(output);
@@ -241,7 +251,7 @@ Chat Bot::getChat(long long chatId) {
             jsonResponse["result"].get_to(chat);
         }
     } catch (const std::exception& e) {
-        std::cerr << "JSON parse error in getChat: " << e.what() << std::endl;
+        spdlog::error("JSON parse error in getChat: {}", e.what());
     }
     return chat;
 }
@@ -265,7 +275,7 @@ std::string Bot::makeRequest(const std::string& endpoint, const std::string& par
 
         res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
-            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+            spdlog::error("curl_easy_perform() failed: {}", curl_easy_strerror(res));
         }
         curl_easy_cleanup(curl);
     }
@@ -290,7 +300,7 @@ std::vector<Update> Bot::getUpdates() {
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "JSON parse error: " << e.what() << std::endl;
+        spdlog::error("JSON parse error: {}", e.what());
     }
 
     return updates;
@@ -298,11 +308,9 @@ std::vector<Update> Bot::getUpdates() {
 
 void Bot::poll() {
     auto updates = getUpdates();
-    for (const Update& update : updates) {
-        if (update.update_id >= lastUpdateId) {
-            lastUpdateId = update.update_id + 1;
-        }
+    if (updates.empty()) return;
 
+    for (const Update& update : updates) {
         // Extract fields
         long long chatId = 0;
         long long userId = 0;
@@ -323,6 +331,8 @@ void Bot::poll() {
             userId = update.callback_query.from.id;
         }
 
+        std::function<void()> task;
+
         // Handle Commands
         bool isCommand = false;
         if (update.message.message_id != 0 && !msg.text.empty()) {
@@ -332,8 +342,7 @@ void Bot::poll() {
                 size_t atPos = command.find('@');
                 if (atPos != std::string::npos) command = command.substr(0, atPos);
                 if (commandHandlers.find(command) != commandHandlers.end()) {
-                    // Dispatch command
-                    std::thread(commandHandlers[command], msg).detach();
+                    task = [handler = commandHandlers[command], msg] { handler(msg); };
                     isCommand = true;
                 }
             }
@@ -349,10 +358,9 @@ void Bot::poll() {
             });
 
             if (entry) {
-                std::thread([this, update, key, entry]() {
+                task = [this, update, key, entry]() {
                     bool closedNow = false;
                     {
-                        // Use fine-grained lock specific to this conversation entry
                         std::lock_guard<std::mutex> lock(entry->mutex);
                         if (!entry->conversation->isClosed()) {
                             entry->conversation->handleUpdate(update);
@@ -367,7 +375,7 @@ void Bot::poll() {
                             return kv.second == entry;
                         });
                     }
-                }).detach();
+                };
                 isConversation = true;
             }
         }
@@ -375,8 +383,7 @@ void Bot::poll() {
         // Handle Text Messages
         if (!isCommand && !isConversation && update.message.message_id != 0 && !msg.text.empty()) {
             if (textHandler) {
-                // Dispatch text
-                std::thread(textHandler, msg).detach();
+                task = [handler = textHandler, msg] { handler(msg); };
             }
         }
 
@@ -397,11 +404,23 @@ void Bot::poll() {
                     query.sender_name = update.callback_query.from.first_name;
                     query.data = rawData.substr(sep + 1);
                     query.message_text = update.callback_query.message.text;
-                    std::thread(it->second, query).detach();
+                    task = [handler = it->second, query] { handler(query); };
                 }
             }
         }
+
+        // Submit to thread pool; blocks if queue is full.
+        // If pool is shut down, stop processing — do not advance lastUpdateId.
+        if (task) {
+            if (!threadPool_.submit(std::move(task))) {
+                return;
+            }
+        }
     }
+
+    // All updates in this batch were successfully submitted.
+    // Advance lastUpdateId only now — prevents silent update loss.
+    lastUpdateId = updates.back().update_id + 1;
 }
 
 }

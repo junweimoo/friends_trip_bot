@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <set>
 #include <map>
+#include <chrono>
+#include <spdlog/spdlog.h>
 
 SimplifyPaymentsConversation::SimplifyPaymentsConversation(long long chat_id, long long thread_id, long long user_id,
     bot::Bot& bot, UserRepository& userRepo, TripRepository& tripRepo, PaymentRepository& payRepo,
@@ -191,7 +193,12 @@ void SimplifyPaymentsConversation::computeAndDisplayResults() {
         simplifier = std::make_unique<GreedyDebtSimplifier>();
     }
 
+    auto start = std::chrono::steady_clock::now();
     auto simplifiedPayments = simplifier->simplifyDebts(paymentGroups_, exchangeRates_, targetCurrency_);
+    auto elapsed = std::chrono::steady_clock::now() - start;
+    spdlog::info("simplifyDebts took {}ms for {} paymentGroups",
+                 std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+                 paymentGroups_.size());
 
     std::stringstream ss;
     ss << "💰 <b>Simplified Payments (" << targetCurrency_ << ")</b>\n";

@@ -18,6 +18,7 @@
 #include "InternalTypes.h"
 #include "Scheduler.h"
 #include "TelegramTypes.h"
+#include "ThreadPool.h"
 
 namespace bot {
 
@@ -102,6 +103,10 @@ private:
 
     std::atomic<uint64_t> callbackCounter_{0};
     phmap::parallel_flat_hash_map<std::string, StoredCallback> callbacks_;
+
+    // Declared last: destroyed first, draining all in-flight tasks
+    // before handler maps, conversations, and callbacks are destroyed.
+    ThreadPool threadPool_;
 
     void poll();
     void sweepExpiredCallbacks();
