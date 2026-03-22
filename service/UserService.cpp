@@ -12,7 +12,7 @@ bool UserService::registerUser(const User& user) {
     button.url = "https://t.me/" + botUsername + "?start=register" + std::to_string(user.chat_id);
     keyboard.inline_keyboard.push_back({button});
     bot_.sendMessage(user.chat_id,
-        "Tap on the Register button to register yourself in this trip.\n"
+        "Tap on the Register button to register yourself in this chat.\n"
         "Check registered users with /trips.",
         &keyboard);
     return true;

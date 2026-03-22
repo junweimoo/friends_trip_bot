@@ -2,6 +2,7 @@
 #include "../bot/Bot.h"
 #include "../utils/utils.h"
 #include "../utils/MoneyAmount.h"
+#include <map>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -108,11 +109,21 @@ void ListPaymentsConversation::sendCurrentPage(bool editMessage) {
         for (int i = startIdx; i < endIdx; ++i) {
             const auto& group = paymentGroups[i];
 
-            ss << "📂 " << i + 1 << ". <b>" << group.name << "</b> (" << utils::formatTimestamp(group.gmt_created, 8) << ")\n";
+            ss << "📂 " << paymentGroups.size() - i << ". <b>" << group.name << "</b> (" << utils::formatTimestamp(group.gmt_created, 8) << ")\n";
             ss << "<b>" << group.total_amount.toHumanReadable() << "</b> paid by <b>" << users[group.payer_user_id].name << "</b>\n";
 
+            // Group records by minor amount
+            std::map<long long, std::vector<const PaymentRecord*>> amountGroups;
             for (const auto& record : group.records) {
-                ss << "- " << users[record.to_user_id].name << " received " << record.amount.toHumanReadable() << "\n";
+                amountGroups[record.amount.minorAmount()].push_back(&record);
+            }
+            for (const auto& [minorAmount, records] : amountGroups) {
+                ss << "- ";
+                for (size_t j = 0; j < records.size(); ++j) {
+                    if (j > 0) ss << ", ";
+                    ss << users[records[j]->to_user_id].name;
+                }
+                ss << " received " << records[0]->amount.toHumanReadable() << "\n";
             }
             ss << "\n";
         }

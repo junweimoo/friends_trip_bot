@@ -216,7 +216,7 @@ void SimplifyPaymentsConversation::computeAndDisplayResults() {
     if (!simplifiedPayments.empty()) {
         for (const auto& payment : simplifiedPayments) {
             std::stringstream dm;
-            dm << "💰 <b>Trip: " << trip_.name << "</b>\n\n"
+            dm << "💰 <b>Trip: " << trip_.name << "</b>\n"
                << "➡️ Pay <b>" << users_[payment.to_user_id].name << "</b>: "
                << "<b>" << payment.amount.toHumanReadable() << "</b>";
 

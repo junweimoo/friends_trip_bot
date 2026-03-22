@@ -44,7 +44,8 @@ void RecordPaymentConversation::handleUpdate(const bot::Update& update) {
 
     if (closed) return;
 
-    if (update.message.message_id != 0 && update.message.text == "/cancel") {
+    if (update.message.message_id != 0 &&
+        (update.message.text == "/cancel" || update.message.text.rfind("/cancel@", 0) == 0)) {
         cancelConversation();
         return;
     }
@@ -420,7 +421,7 @@ void RecordPaymentConversation::sendEqualSplitRecipients(bool editMessage) {
 
     bot::InlineKeyboardMarkup keyboard;
     if (!allocatedAmounts.empty()) {
-        keyboard.inline_keyboard.push_back({{"Done", createCallbackData(State::EqualSplit, "done")}});
+        keyboard.inline_keyboard.push_back({{"👍 Done", createCallbackData(State::EqualSplit, "done")}});
     }
     keyboard.inline_keyboard.push_back({{"Select all", createCallbackData(State::EqualSplit, "select_all")}});
     keyboard.inline_keyboard.push_back({{"Unselect all", createCallbackData(State::EqualSplit, "unselect_all")}});
@@ -506,7 +507,7 @@ void RecordPaymentConversation::sendManualRecipients(bool editMessage) {
 
     bot::InlineKeyboardMarkup keyboard;
     if (currentAllocated == paymentGroup.total_amount.minorAmount()) {
-        keyboard.inline_keyboard.push_back({{"Done", createCallbackData(State::ManualRecipient, "done")}});
+        keyboard.inline_keyboard.push_back({{"👍 Done", createCallbackData(State::ManualRecipient, "done")}});
     }
 
     appendPaginatedUserButtons(keyboard, State::ManualRecipient,

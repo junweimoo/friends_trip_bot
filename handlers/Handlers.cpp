@@ -103,7 +103,7 @@ void registerHandlers(bot::Bot& bot, const Services& services, const Repositorie
             (*callback)();
             bot.answerCallbackQuery(query.id, "Payment logged!");
             bot.editMessage(query.chat_id, query.message_id,
-                query.message_text + "\n\n\xe2\x9c\x85 Paid", nullptr, "");
+                query.message_text + "\n\xe2\x9c\x85 Paid", nullptr, "");
         } else {
             bot.answerCallbackQuery(query.id, "This button has expired.", true);
         }
